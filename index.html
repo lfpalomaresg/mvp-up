@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVP-UP · Orquestador de escalado de producto</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#181c24; --panel2:#1f2430; --line:#2a3140;
+    --txt:#e8eaf0; --muted:#9aa3b5; --accent:#ff8a1e; --accent2:#ffb35c;
+    --green:#3ecf8e; --yellow:#f5c542; --red:#ef5b5b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.55}
+  .wrap{max-width:960px;margin:0 auto;padding:0 20px}
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:1.6rem;margin-bottom:8px}
+  h2 span{color:var(--accent)}
+  .sub{color:var(--muted);margin-bottom:28px;max-width:640px}
+
+  /* HERO */
+  .hero{padding:80px 0 60px;text-align:center;background:radial-gradient(ellipse at top,#1c2230 0%,var(--bg) 65%)}
+  .hero .logo{font-size:3rem;font-weight:800;letter-spacing:-1px}
+  .hero .logo em{font-style:normal;color:var(--accent)}
+  .hero p.tag{font-size:1.15rem;color:var(--muted);margin:14px auto 26px;max-width:560px}
+  .badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .badge{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 14px;font-size:.85rem;color:var(--accent2)}
+  .cmd{display:inline-block;margin-top:30px;background:#0a0c10;border:1px solid var(--line);border-radius:10px;padding:12px 22px;font-family:ui-monospace,Menlo,monospace;font-size:.95rem}
+  .cmd b{color:var(--accent)}
+
+  /* DIMENSIONES */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+  .dim{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.15s;user-select:none}
+  .dim:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .dim.active{border-color:var(--accent);background:var(--panel2)}
+  .dim .n{font-size:.7rem;color:var(--muted)}
+  .dim .ico{font-size:1.4rem;margin:4px 0}
+  .dim .name{font-weight:600;font-size:.9rem}
+  .detail{margin-top:16px;background:var(--panel2);border:1px solid var(--accent);border-radius:12px;padding:20px;display:none}
+  .detail.show{display:block;animation:fade .25s}
+  .detail h3{color:var(--accent);margin-bottom:6px}
+  .detail p{color:var(--txt);font-size:.95rem}
+  .detail .na{color:var(--muted);font-size:.85rem;margin-top:8px}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+
+  /* FLUJO */
+  .steps{display:flex;flex-direction:column;gap:0}
+  .step{display:flex;gap:16px}
+  .step .rail{display:flex;flex-direction:column;align-items:center}
+  .step .dot{width:34px;height:34px;border-radius:50%;background:var(--panel2);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);flex-shrink:0}
+  .step .bar{width:2px;flex:1;background:var(--line);min-height:22px}
+  .step:last-child .bar{display:none}
+  .step .body{padding:4px 0 26px}
+  .step .body b{display:block;margin-bottom:2px}
+  .step .body span{color:var(--muted);font-size:.92rem}
+
+  /* ETAPAS */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .tab{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:8px 16px;cursor:pointer;font-size:.9rem;color:var(--muted);transition:.15s}
+  .tab.on{background:var(--accent);color:#14161c;border-color:var(--accent);font-weight:700}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--panel2);border:1px solid var(--accent2);color:var(--accent2);border-radius:8px;padding:8px 14px;font-size:.9rem;animation:fade .25s}
+
+  /* MATRIZ */
+  .matrix{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .cell{border-radius:12px;padding:18px;border:1px solid var(--line)}
+  .cell b{display:block;margin-bottom:4px}
+  .cell span{font-size:.88rem;color:var(--muted)}
+  .qw{background:rgba(62,207,142,.08);border-color:var(--green)} .qw b{color:var(--green)}
+  .ap{background:rgba(255,138,30,.08);border-color:var(--accent)} .ap b{color:var(--accent)}
+  .st{background:var(--panel)} .ds{background:var(--panel);opacity:.65}
+
+  /* DEMO INFORME */
+  .report{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px}
+  .report h4{font-family:ui-monospace,Menlo,monospace;color:var(--muted);font-size:.85rem;margin-bottom:16px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .row .lbl{width:120px;font-size:.88rem;flex-shrink:0}
+  .row .track{flex:1;height:12px;background:#0a0c10;border-radius:6px;overflow:hidden}
+  .row .fill{height:100%;border-radius:6px;width:0;transition:width 1s ease}
+  .row .val{width:78px;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;text-align:right}
+  .d-up{color:var(--green)} .d-eq{color:var(--muted)} .d-dn{color:var(--red)}
+  .note{margin-top:14px;font-size:.85rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:12px}
+
+  /* FILOSOFIA */
+  .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .rule{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .rule b{color:var(--accent2)}
+  .rule p{font-size:.9rem;color:var(--muted);margin-top:4px}
+
+  footer{padding:36px 0;text-align:center;color:var(--muted);font-size:.85rem}
+  footer b{color:var(--accent)}
+  @media(max-width:560px){.hero .logo{font-size:2.2rem}.matrix{grid-template-columns:1fr}.row .lbl{width:92px;font-size:.8rem}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="logo">MVP<em>-UP</em> 🚀</div>
+    <p class="tag">Orquestador multi-agente que audita tu producto en <b>10 dimensiones</b>, lo convierte en un roadmap de escalado y <b>mide tu progreso</b> en cada pasada.</p>
+    <div class="badges">
+      <span class="badge">🤖 Agentes en paralelo</span>
+      <span class="badge">📊 Scores 0-10 con evidencia</span>
+      <span class="badge">🔁 Ciclo, no foto</span>
+      <span class="badge">🧑‍⚖️ Tú autorizas, la IA propone</span>
+    </div>
+    <div class="cmd">$ <b>/mvp-up</b> mi-producto <span style="color:var(--muted)">[express|full]</span></div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <h2>Las <span>10 dimensiones</span></h2>
+    <p class="sub">Un producto no escala solo con buen código. Toca cada carta para ver qué evalúa su agente.</p>
+    <div class="grid" id="dims"></div>
+    <div class="detail" id="detail"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Cómo <span>funciona</span></h2>
+    <p class="sub">Seis fases, de la pregunta clave al roadmap autorizado.</p>
+    <div class="steps">
+      <div class="step"><div class="rail"><div class="dot">0</div><div class="bar"></div></div><div class="body"><b>Intake</b><span>Producto, etapa y la pregunta clave: ¿qué significa "escalar" para ti? ¿Más ingresos, producto vendible, inversión, menos dependencia tuya? La ponderación depende de esto.</span></div></div>
+      <div class="step"><div class="rail"><div class="dot">1</div><div class="bar"></div></div><div class="body"><b>Agentes en paralelo</b><span>Express: 3-5 dimensiones críticas de tu etapa. Full: las 10. Solo análisis — ningún agente modifica nada.</span></div></div>
+      <div class="step"><div class="rail"><div class="dot">2</div><div class="bar"></div></div><div class="body"><b>Consolidación</b><span>Score global ponderado + matriz impacto×esfuerzo. Los hallazgos que bloquean varias dimensiones a la vez se marcan como estructurales.</span></div></div>
+      <div class="step"><div class="rail"><div class="dot">3</div><div class="bar"></div></div><div class="body"><b>Roadmap</b><span>H1 esta semana (quick wins) · H2 este mes · H3 trimestre. Cada acción con coste estimado y qué score sube.</span></div></div>
+      <div class="step"><div class="rail"><div class="dot">4</div><div class="bar"></div></div><div class="body"><b>Comparación</b><span>Si hay pasada anterior: Δ por dimensión, qué acciones se hicieron y si movieron la aguja. Un score que baja se señala en rojo.</span></div></div>
+      <div class="step"><div class="rail"><div class="dot">5</div><div class="bar"></div></div><div class="body"><b>Entrega y autorización</b><span>Informe fechado y versionado + TOP-5 de acciones propuestas. Nada se ejecuta sin tu OK.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Modo <span>express</span>: la etapa elige por ti</h2>
+    <p class="sub">Lanzar 10 agentes cada vez sería tirar el dinero. Selecciona la etapa de tu producto:</p>
+    <div class="tabs" id="tabs"></div>
+    <div class="chips" id="chips"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Matriz <span>impacto × esfuerzo</span></h2>
+    <p class="sub">Todos los hallazgos acaban aquí. El orden de ataque sale solo.</p>
+    <div class="matrix">
+      <div class="cell qw"><b>⚡ Quick wins</b><span>Impacto alto · esfuerzo bajo → H1, esta semana</span></div>
+      <div class="cell ap"><b>🎯 Apuestas</b><span>Impacto alto · esfuerzo alto → H2/H3, solo si el objetivo de valor las justifica</span></div>
+      <div class="cell st"><b>📋 Si sobra tiempo</b><span>Impacto medio · esfuerzo bajo</span></div>
+      <div class="cell ds"><b>🗑️ Descartar</b><span>Impacto bajo · esfuerzo alto → decir "no" también es escalar</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>El informe <span>vive y compara</span></h2>
+    <p class="sub">Demo con datos de ejemplo — así se ve la evolución entre dos pasadas:</p>
+    <div class="report" id="report">
+      <h4>AI_OS/PROJECTS/_escalado/mi-producto/2026-07-06-informe.md · pasada nº 2</h4>
+    </div>
+    <p class="note" style="max-width:640px">Cada informe es Markdown plano versionado por fecha: lo lee cualquier IA, cualquier editor y tú dentro de 5 años. La dimensión <b>Datos y medición</b> es la que convierte los Δ en hechos y no en opiniones.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Reglas de la <span>casa</span></h2>
+    <div class="rules">
+      <div class="rule"><b>Solo análisis</b><p>Los agentes no tocan archivos, no comitean, no llaman APIs de pago. Diagnostican.</p></div>
+      <div class="rule"><b>Evidencia o nada</b><p>Todo hallazgo cita archivo, URL o dato. Cifra sin fuente = N/D, jamás inventada.</p></div>
+      <div class="rule"><b>Tú tienes el botón</b><p>Disparo siempre manual. La IA sugiere el momento («¿lanzo un express?»), pero no se auto-ejecuta nunca.</p></div>
+      <div class="rule"><b>Sirve sin software</b><p>¿Un servicio, un spa, una consultoría? Las dimensiones técnicas se marcan N/A y el resto trabaja igual.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <b>MVP-UP</b> · skill para Claude Code · creada por Luisfran Palomares — dirección hotelera + IA aplicada<br>
+    v1 · 2026 · en calibración con producto piloto real
+  </div>
+</footer>
+
+<script>
+const DIMS=[
+ {i:"🏗️",n:"Técnica",d:"Calidad y estructura del código, arquitectura front/back, deuda técnica, tests, dependencias vulnerables y la pregunta clave: ¿aguanta 10× usuarios sin reescribirlo?",na:"N/A si el producto no tiene software."},
+ {i:"🔐",n:"Seguridad",d:"Credenciales expuestas, auth/authz, validación de inputs, rate limiting, permisos de base de datos, CVEs en dependencias. En servicios sin app: dónde viven los datos de clientes y quién accede.",na:""},
+ {i:"⚖️",n:"Legal",d:"RGPD, aviso legal, cookies, términos de servicio, propiedad intelectual y marca, contratos con clientes y proveedores, licencias de dependencias y assets.",na:""},
+ {i:"🎨",n:"Producto / UX",d:"¿Se entiende la propuesta de valor en 5 segundos? Fricción del onboarding, pasos hasta el primer valor, estados de error, móvil, y qué SOBRA (feature creep).",na:""},
+ {i:"💰",n:"Comercial",d:"Oferta formulada (estilo Grand Slam: resultado × probabilidad ÷ tiempo × esfuerzo), pricing justificado, garantías, objeciones mapeadas, canales activos y proceso de venta repetible.",na:""},
+ {i:"📣",n:"Marketing y hype",d:"Posicionamiento diferenciado, cliente ideal definido, motor de contenido vs silencio, prueba social, narrativa honesta y contable (demo grabable), SEO básico.",na:""},
+ {i:"🌍",n:"Mercado",d:"Tamaño y accesibilidad del nicho, 3-5 competidores directos con precios, hueco real, tendencias, riesgo regulatorio y oportunidades adyacentes: ¿a quién más le sirve esto tal cual?",na:"Este agente sí navega: 3-5 fuentes citadas."},
+ {i:"📉",n:"Económica",d:"Costes recurrentes reales (hosting, APIs, licencias — se buscan en el repo, no se suponen), margen unitario, break-even, ingresos actuales. Regla dura: cifra sin fuente = N/D.",na:""},
+ {i:"⚙️",n:"Operativa",d:"Mapa honesto de qué depende de ti a mano. ¿Qué pasa si desapareces 2 semanas? Horas de onboarding por cliente, canal de soporte, procesos documentados vs en tu cabeza.",na:""},
+ {i:"📡",n:"Datos y medición",d:"¿Hay analítica? ¿Se miden las 3-5 métricas que importan para TU objetivo de valor? ¿Hay canal de feedback? ¿La última decisión se tomó con datos o a ojo?",na:"La dimensión que convierte el ciclo en medible."}
+];
+const grid=document.getElementById('dims'),detail=document.getElementById('detail');
+DIMS.forEach((d,k)=>{
+  const c=document.createElement('div');c.className='dim';
+  c.innerHTML=`<div class="n">DIMENSIÓN ${k+1}</div><div class="ico">${d.i}</div><div class="name">${d.n}</div>`;
+  c.onclick=()=>{
+    document.querySelectorAll('.dim').forEach(x=>x.classList.remove('active'));
+    if(detail.dataset.k==k&&detail.classList.contains('show')){detail.classList.remove('show');detail.dataset.k='';return}
+    c.classList.add('active');detail.dataset.k=k;
+    detail.innerHTML=`<h3>${d.i} ${d.n}</h3><p>${d.d}</p>${d.na?`<div class="na">ℹ️ ${d.na}</div>`:''}`;
+    detail.classList.add('show');
+  };
+  grid.appendChild(c);
+});
+
+const ETAPAS={
+ "Idea / prototipo":["🌍 Mercado","🎨 Producto/UX","💰 Comercial","📉 Económica"],
+ "MVP funcionando":["🏗️ Técnica","🎨 Producto/UX","💰 Comercial","📣 Marketing/hype"],
+ "Producción sin ingresos":["📣 Marketing/hype","💰 Comercial","🌍 Mercado","📉 Económica"],
+ "Facturando":["📉 Económica","⚙️ Operativa","🔐 Seguridad","⚖️ Legal","📡 Datos"]
+};
+const tabs=document.getElementById('tabs'),chips=document.getElementById('chips');
+Object.keys(ETAPAS).forEach((e,k)=>{
+  const t=document.createElement('div');t.className='tab'+(k===1?' on':'');t.textContent=e;
+  t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));t.classList.add('on');paint(e)};
+  tabs.appendChild(t);
+});
+function paint(e){chips.innerHTML='';ETAPAS[e].forEach(d=>{const s=document.createElement('div');s.className='chip';s.textContent=d;chips.appendChild(s)})}
+paint("MVP funcionando");
+
+const SCORES=[
+ ["Técnica",7,1],["Seguridad",5,0],["Producto/UX",8,2],["Comercial",4,1],["Marketing",3,0],["Económica",6,-1]
+];
+const rep=document.getElementById('report');
+SCORES.forEach(([n,v,d])=>{
+  const col=v>=7?'var(--green)':v>=5?'var(--yellow)':'var(--red)';
+  const dl=d>0?`<span class="d-up">▲ +${d}</span>`:d<0?`<span class="d-dn">▼ ${d}</span>`:`<span class="d-eq">＝</span>`;
+  const r=document.createElement('div');r.className='row';
+  r.innerHTML=`<div class="lbl">${n}</div><div class="track"><div class="fill" data-w="${v*10}" style="background:${col}"></div></div><div class="val">${v}/10 ${dl}</div>`;
+  rep.appendChild(r);
+});
+new IntersectionObserver((es,o)=>{es.forEach(e=>{if(e.isIntersecting){document.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w+'%');o.disconnect()}})},{threshold:.3}).observe(rep);
+</script>
+</body>
+</html>
