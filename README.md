@@ -135,9 +135,9 @@ propios checklists — esas skills solo enriquecen el resultado.
 
 ## Estado
 
-- ✅ v1 funcional (2026-07)
-- 🔬 En calibración con producto piloto real
-- 📝 Roadmap: ponderaciones afinadas por objetivo de valor tras 3+ pasadas reales
+- ✅ v1.1 (2026-07) — calibrada con 11 proyectos reales (1 piloto express + 3 express + 7 ligeras, 18 agentes)
+- 🔬 Autoevaluada con su propio modo ligera: 6/10 (sí, se audita a sí misma)
+- 📝 Roadmap v1.2: validador de formato de outputs · tabla completa de ponderaciones por objetivo de valor · límites operativos y coste por modo documentados
 
 ## Autor
 
