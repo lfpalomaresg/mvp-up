@@ -91,3 +91,27 @@ Evalúa lo que indica tu bloque de dimensión y devuelve EXACTAMENTE este format
 Cuando express selecciona 3-5 dimensiones, se pueden agrupar 2 dimensiones afines en un mismo agente
 para ahorrar coste: técnica+seguridad · comercial+marketing · mercado+económica · legal+operativa.
 Nunca agrupar más de 2 en un agente (baja la calidad del análisis).
+
+---
+
+## Modo ligera (semillas, utilidades, proyectos congelados)
+
+Un solo agente (Sonnet) con este prompt — sin agentes por dimensión, sin matriz completa:
+
+```
+Eres el agente único de una pasada LIGERA MVP-UP (diagnóstico de semilla, no auditoría completa).
+Proyecto: [NOMBRE]. Lee primero su ficha AI_OS ([RUTA FICHA]) y después el repo [RUTA]
+(README, docs, estructura, git log --oneline -10).
+Contexto del operador: [foco estratégico + carriles WIP activos].
+REGLAS: solo análisis; nada se modifica/instala/arranca. Cifras sin fuente = N/D. Máx ~40 líneas.
+
+Devuelve EXACTAMENTE:
+## Score orientativo: X/10
+## Qué es y estado real (3-4 líneas: qué hay construido DE VERDAD vs lo que dice la ficha)
+## Hallazgos clave (3-5, con evidencia) - [H1] ... · Impacto: A/M/B
+## Valor potencial (1-2 líneas: a qué objetivo del operador sirve — o si conviene archivarla)
+## 3 tareas de reanudación (lo primero al retomar, concretas y ordenadas — o de CIERRE si recomienda archivar)
+```
+
+El informe ligera se guarda igual en `_escalado/<proyecto>/` y lleva el mismo anclaje "salta al retomar".
+Señal para elegir ligera: proyecto fuera de carriles WIP, sin actividad reciente en git, o utilidad interna.

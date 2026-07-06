@@ -4,9 +4,9 @@ description: >-
   Orquestador MVP-UP — audita un producto, proyecto o servicio en 10 dimensiones (técnica,
   seguridad, legal, UX, comercial, marketing/hype, mercado, económica, operativa, datos)
   con agentes paralelos de solo análisis; consolida scores 0-10, matriz impacto×esfuerzo
-  y roadmap de escalado; cada re-ejecución compara con el informe anterior. Activar con
-  '/mvp-up', 'escala este producto', 'auditoría 360', 'sube de nivel este proyecto'.
-  Express por defecto; 'full' lanza las 10 dimensiones.
+  y roadmap; cada pasada compara con la anterior. Activar con '/mvp-up', 'escala este
+  producto', 'auditoría 360'. Modos: express (default), full (10 agentes), ligera
+  (semillas, 1 agente). Con 2+ proyectos genera además síntesis de cartera.
 triggers:
   - "/mvp-up"
   - "mvp up"
@@ -19,6 +19,8 @@ alwaysActive: false
 ---
 
 # MVP-UP — Orquestador de escalado de producto
+
+> **v1.1 (2026-07-06)** — evoluciones tras la campaña de calibración real de 11 proyectos.
 
 Convierte cualquier producto, proyecto o servicio en un diagnóstico 360° + roadmap de escalado,
 lanzando **agentes paralelos de solo análisis** (uno por dimensión en modo full, agrupados en express).
@@ -49,9 +51,10 @@ del ecosistema; el pre-deploy técnico ya lo cubre `tool-quality-gate`.
 Recopilar antes de lanzar nada:
 
 1. **Producto**: nombre, ruta del repo/carpeta, URL si está desplegado, ficha en `~/claude_workspace/AI_OS/PROJECTS/<producto>.md` (leerla si existe).
+   ⚠️ **El repo manda sobre la ficha**: verificar `git log` y estructura real ANTES de fiarse de la ficha; si divergen, usar el estado del repo y reportar la desalineación como hallazgo estándar del informe (proponiendo actualizar la ficha). Lección de calibración: las fichas suelen estar desactualizadas.
 2. **Etapa**: idea/prototipo · MVP funcionando · en producción sin ingresos · facturando.
 3. **Objetivo de valor** (pregunta clave): ¿qué significa "escalarlo"? → más ingresos / producto vendible a terceros / atraer inversión / reducir dependencia del operador. La ponderación de scores depende de esto.
-4. **Modo**: express (default) o full. Si el usuario pide full, confirmar («son 10 agentes en paralelo, es la pasada cara»).
+4. **Modo**: express (default) · full · **ligera**. Full: confirmar antes («son 10 agentes en paralelo, la pasada cara»). **Ligera** — para semillas, utilidades y proyectos congelados fuera de los carriles WIP: 1 solo agente multi-dimensión, informe reducido (score orientativo + estado real vs ficha + 3-5 hallazgos + valor potencial + 3 tareas de reanudación); plantilla en `references/dimensiones.md` § "Modo ligera".
 5. **Pasada anterior**: comprobar si existe `AI_OS/PROJECTS/_escalado/<producto>/` con informes previos.
 
 **Selección de dimensiones en express** (según etapa):
@@ -92,6 +95,7 @@ en `AI_OS/WORKFLOWS.md`.
 2. **Score global** = media ponderada según objetivo de valor (p.ej. objetivo "vendible a terceros" pondera alto legal+técnica+operativa; objetivo "más ingresos" pondera comercial+marketing+económica).
 3. **Matriz impacto×esfuerzo** con TODOS los hallazgos: cuadrante quick wins (impacto A, esfuerzo B) primero.
 4. Detectar hallazgos que se refuerzan entre dimensiones (p.ej. "sin analítica" bloquea comercial Y marketing) → marcarlos como estructurales.
+5. **Si la pasada cubre 2+ proyectos**: generar además la síntesis de CARTERA — patrones transversales que ningún informe individual muestra (p.ej. "técnica siempre > comercial", "la ventaja competitiva del operador sin capitalizar en ningún proyecto") — e incluirla en la entrega y en memoria.
 
 ### Fase 3 · Roadmap de escalado
 
@@ -111,9 +115,9 @@ Respetar la regla WIP del foco estratégico: si el producto no está en los carr
 
 ### Fase 5 · Entrega y cierre
 
-1. Informe MD → `~/claude_workspace/AI_OS/PROJECTS/_escalado/<producto>/YYYY-MM-DD-informe.md` (portable, lo lee cualquier IA; sincroniza Mac↔HP por Drive).
-2. Si el usuario quiere compartirlo: HTML autocontenido vía `tool-visual-explainer`.
-3. Pasar `tool-output-verifier` sobre el informe antes de entregar.
+1. Informe MD → `~/claude_workspace/AI_OS/PROJECTS/_escalado/<producto>/YYYY-MM-DD-informe.md` (portable, lo lee cualquier IA; sincroniza Mac↔HP por Drive). Verificación inline obligatoria: todo hallazgo con evidencia; cifras sin fuente = N/D.
+2. **Anclaje "salta al retomar"** (cierra el ciclo): añadir sección `## ⚡ MVP-UP X/10 (fecha) — LEER AL RETOMAR` al final de la ficha `AI_OS/PROJECTS/<producto>.md` apuntando al informe, y a la memoria del proyecto si existe (+ línea en MEMORY.md). La próxima sesión sobre ese proyecto DEBE arrancar leyendo el informe.
+3. Si el usuario quiere compartir el informe: HTML autocontenido vía `tool-visual-explainer`, y SOLO en ese caso pasar `tool-output-verifier` (gate para entregables de cliente; para informes internos MD basta la verificación inline del punto 1).
 4. Presentar al usuario el TOP-5 de acciones y preguntar cuáles autoriza. **Nada se ejecuta sin OK.**
 5. Si autoriza acciones ejecutables por Claude, proponer orden y arrancar (o encolar para próxima sesión).
 6. Append en `context/learnings.md` bajo `## strategy-mvp-up` si la pasada enseñó algo del método.

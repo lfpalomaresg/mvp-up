@@ -25,8 +25,13 @@ tablero a la vez** y te dice dónde está el siguiente punto de mayor palanca.
    económicas sin fuente se marcan N/D — jamás se inventan.
 4. **Ciclo, no foto.** Los informes se versionan por fecha; cada re-auditoría muestra el Δ
    de cada score y qué acciones del roadmap anterior se hicieron (o se ignoraron).
-5. **Coste consciente.** Disparo siempre manual. Modo *express* por defecto (3-5 dimensiones
-   según la etapa); modo *full* (las 10) solo con confirmación.
+5. **Coste consciente.** Disparo siempre manual. Tres modos: *express* por defecto (3-5
+   dimensiones según la etapa), *full* (las 10, solo con confirmación) y *ligera* (1 agente
+   para semillas, utilidades y proyectos congelados — score orientativo + 3 tareas de reanudación).
+
+> **v1.1** — evoluciones tras calibración con 11 proyectos reales: modo ligera · el repo manda
+> sobre la documentación en el intake · anclaje "salta al retomar" en la ficha del proyecto ·
+> síntesis de cartera al auditar 2+ proyectos · verificación proporcional al tipo de entregable.
 
 ## Las 10 dimensiones
 
