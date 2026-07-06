@@ -20,7 +20,7 @@ alwaysActive: false
 
 # MVP-UP — Orquestador de escalado de producto
 
-> **v1.1 (2026-07-06)** — evoluciones tras la campaña de calibración real de 11 proyectos.
+> **v1.2 (2026-07-07)** — validador de formato, tabla completa de ponderaciones, límites operativos y coste documentados (salidas de la autoevaluación 6/10). **v1.1 (2026-07-06)** — evoluciones tras la campaña de calibración real de 11 proyectos.
 
 Convierte cualquier producto, proyecto o servicio en un diagnóstico 360° + roadmap de escalado,
 lanzando **agentes paralelos de solo análisis** (uno por dimensión en modo full, agrupados en express).
@@ -52,6 +52,7 @@ Recopilar antes de lanzar nada:
 
 1. **Producto**: nombre, ruta del repo/carpeta, URL si está desplegado, ficha en `~/claude_workspace/AI_OS/PROJECTS/<producto>.md` (leerla si existe).
    ⚠️ **El repo manda sobre la ficha**: verificar `git log` y estructura real ANTES de fiarse de la ficha; si divergen, usar el estado del repo y reportar la desalineación como hallazgo estándar del informe (proponiendo actualizar la ficha). Lección de calibración: las fichas suelen estar desactualizadas.
+   Si NO existe ficha: no improvisar contexto — auditar solo el repo, y al cerrar la pasada crear la ficha mínima (3 líneas: qué es, estado, repo) con su anclaje ⚡ incluido.
 2. **Etapa**: idea/prototipo · MVP funcionando · en producción sin ingresos · facturando.
 3. **Objetivo de valor** (pregunta clave): ¿qué significa "escalarlo"? → más ingresos / producto vendible a terceros / atraer inversión / reducir dependencia del operador. La ponderación de scores depende de esto.
 4. **Modo**: express (default) · full · **ligera**. Full: confirmar antes («son 10 agentes en paralelo, la pasada cara»). **Ligera** — para semillas, utilidades y proyectos congelados fuera de los carriles WIP: 1 solo agente multi-dimensión, informe reducido (score orientativo + estado real vs ficha + 3-5 hallazgos + valor potencial + 3 tareas de reanudación); plantilla en `references/dimensiones.md` § "Modo ligera".
@@ -74,6 +75,8 @@ El usuario puede añadir/quitar dimensiones antes de lanzar.
 - Cada agente recibe su prompt de `references/dimensiones.md` (bloque de su dimensión + plantilla común) rellenando: producto, ruta, URL, etapa, objetivo de valor, contexto AI_OS.
 - Agentes de **solo lectura/análisis**: prohibido editar archivos, hacer commits o llamar APIs de pago sin avisar.
 - Cada agente devuelve el formato estándar: score 0-10 + hallazgos (máx 7, con impacto A/M/B y esfuerzo A/M/B) + quick wins + riesgos.
+- **Validador de formato (obligatorio):** al recibir cada output, comprobar que contiene los headers `##` EXACTOS de su plantilla (completa o ligera); si falta alguno → un reintento con prompt reforzado (misma regla que para fallos de contenido). El MISMO check aplica al orquestador en la consolidación: los informes finales conservan los headers de sus plantillas — el orquestador NO condensa ni reinventa el formato (lección de autoevaluación: el primer incumplimiento real lo cometió el orquestador, no un agente).
+- **Límites operativos:** máximo 5 agentes en paralelo por lote (full = 2 lotes de 5). Coste orientativo medido en la calibración 2026-07 (agentes Sonnet): ligera ≈ 60-80k tokens · express ≈ 250-400k · full ≈ ~1M. Recordar modo y coste al usuario antes de lanzar full.
 - Si una dimensión no aplica (p.ej. "técnica" en un servicio sin software como un spa), no lanzar su agente y marcar N/A en el informe.
 
 **Política de modelos (jerarquía por capas):**
@@ -92,7 +95,16 @@ en `AI_OS/WORKFLOWS.md`.
 ### Fase 2 · Consolidación
 
 1. Recoger los outputs de todos los agentes; normalizar formato.
-2. **Score global** = media ponderada según objetivo de valor (p.ej. objetivo "vendible a terceros" pondera alto legal+técnica+operativa; objetivo "más ingresos" pondera comercial+marketing+económica).
+2. **Score global** = media ponderada de las dimensiones evaluadas, con multiplicador ×2 en las prioritarias del objetivo de valor (tabla FIJA — no inventar pesos por sesión, rompe la comparabilidad Δ):
+
+   | Objetivo de valor | Dimensiones con peso ×2 |
+   |---|---|
+   | Más ingresos | comercial · marketing/hype · económica |
+   | Vendible a terceros | legal · técnica · operativa |
+   | Atraer inversión | mercado · económica · datos y medición |
+   | Reducir dependencia del operador | operativa · datos y medición · producto/UX |
+
+   ⚠️ Si el objetivo de valor CAMBIÓ respecto a la pasada anterior: recalcular el score anterior con los pesos nuevos cuando sea posible, y en todo caso marcar los Δ como **"no comparables directamente"** explicando el cambio en el informe.
 3. **Matriz impacto×esfuerzo** con TODOS los hallazgos: cuadrante quick wins (impacto A, esfuerzo B) primero.
 4. Detectar hallazgos que se refuerzan entre dimensiones (p.ej. "sin analítica" bloquea comercial Y marketing) → marcarlos como estructurales.
 5. **Si la pasada cubre 2+ proyectos**: generar además la síntesis de CARTERA — patrones transversales que ningún informe individual muestra (p.ej. "técnica siempre > comercial", "la ventaja competitiva del operador sin capitalizar en ningún proyecto") — e incluirla en la entrega y en memoria.
