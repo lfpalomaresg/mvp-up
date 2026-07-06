@@ -73,6 +73,19 @@ El usuario puede añadir/quitar dimensiones antes de lanzar.
 - Cada agente devuelve el formato estándar: score 0-10 + hallazgos (máx 7, con impacto A/M/B y esfuerzo A/M/B) + quick wins + riesgos.
 - Si una dimensión no aplica (p.ej. "técnica" en un servicio sin software como un spa), no lanzar su agente y marcar N/A en el informe.
 
+**Política de modelos (jerarquía por capas):**
+
+| Capa | Modelo | Por qué |
+|---|---|---|
+| Orquestador (esta sesión) | El heredado — debe ser tier frontera (Fable/Opus) | Intake, ponderación, cruce de hallazgos y roadmap: donde el criterio importa |
+| Agentes de dimensión | `model: sonnet` en la llamada Agent | Trabajo acotado con checklist; rendimiento casi igual a fracción de coste ×3-10 agentes |
+| Full + decisión crítica (venta, inversión, socio) | Económica y comercial con `model: opus`; resto sonnet | Los 2 agentes de más juicio en la pasada que más importa |
+| Nunca | Haiku/tier ligero para agentes | Evaluar impacto/esfuerzo requiere juicio; ahí se queda corto |
+
+Regla portable (si se ejecuta el método fuera de Claude): orquestador = modelo frontera con
+razonamiento del proveedor; agentes = tier medio; jamás el tier mini/ligero. Equivalencias
+en `AI_OS/WORKFLOWS.md`.
+
 ### Fase 2 · Consolidación
 
 1. Recoger los outputs de todos los agentes; normalizar formato.
