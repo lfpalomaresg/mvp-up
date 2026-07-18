@@ -139,7 +139,11 @@ propios checklists — esas skills solo enriquecen el resultado.
 - 🔬 Autoevaluada con su propio modo ligera: 6/10 (sí, se audita a sí misma)
 - 📝 Roadmap v1.2: validador de formato de outputs · tabla completa de ponderaciones por objetivo de valor · límites operativos y coste por modo documentados
 
-## Autor
+## Autor y créditos
 
 **Luisfran Palomares** — dirección hotelera + IA aplicada.
 Creada con Claude Code sobre el patrón de skills de iAmasters OS.
+
+MVP-UP nació dentro de **[Blindbeds](https://blindbeds.com)** — IA aplicada a la operación
+real del hotel — como la metodología con la que auditamos y escalamos nuestros propios
+productos (APPCC, Supply) antes de abrirla a cualquier proyecto.
