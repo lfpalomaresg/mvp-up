@@ -10,3 +10,13 @@ graphify-out/
 
 # Sello de revisión de conclave (estado local, nunca se versiona)
 .conclave/
+
+# ===== repos-sync: lineas comunes anadidas 2026-08-31 (HP) =====
+data/datos_brutos/
+clientes/
+*.pbix
+*_REAL.xlsx
+*_REAL.csv
+~$*
+.claude/worktrees/
+.playwright/
