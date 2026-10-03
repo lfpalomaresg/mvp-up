@@ -42,3 +42,14 @@ revisión adversarial (careo) → sello conclave → commit.
   `BoundedSemaphore(5)` liberado al terminar el hilo real; esperar hueco también tiene timeout.
   Bloques sobrantes en agentes agrupados: decisión → se registran en el log, NO se reintenta
   (las dimensiones pedidas ya son válidas; reintentar cuesta sin aportar información).
+
+## Loop 3 — Consolidación (Fase 2)
+- **Audit:** la pasada ya produce resultados por dimensión, pero no hay matriz ni detección
+  de hallazgos estructurales: el valor de la skill (orden de ataque) aún no existe.
+- **Hecho:** `consolidation.py`: `build_matrix` (4 cuadrantes de la plantilla, TODOS los
+  hallazgos, orden por impacto → peso del objetivo → esfuerzo) y `structural_findings`
+  (heurística léxica determinista entre dimensiones distintas, máx 3; es candidato, no juicio).
+- **Careo r1 (Codex NO_APTO):** sinónimos de un solo término («Sin analítica» / «No hay
+  analítica») no se agrupaban → singletons idénticos cuentan como relacionados (pero 1 término
+  compartido con palabras extra no) · orden dependiente de qué agente terminó antes → orden
+  canónico total (impacto, dimensión, id, texto) antes de agrupar y dentro de cada grupo.
