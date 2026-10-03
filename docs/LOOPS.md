@@ -111,3 +111,15 @@ revisión adversarial (careo) → sello conclave → commit.
   cualquier posición (valores entrecomillados completos) sobre TODA la instantánea (árbol y
   git log incluidos), reglas en `system` y la instantánea en bloque aparte. Documentado como
   best-effort, no garantía.
+
+## Loop 7 — Síntesis de cartera (Fase 2, punto 5)
+- **Audit:** SKILL.md exige, con 2+ proyectos, patrones transversales que ningún informe
+  individual muestra; no existía.
+- **Hecho:** `portfolio.py`: último informe VÁLIDO por producto (esquema estricto, nombre
+  exacto, retrocede si el último está corrupto), ranking por score global DENTRO de cada
+  objetivo de valor, tabla de cobertura por dimensión, patrones: dimensión débil en toda la
+  cartera (solo con mayoría evaluada; si no, «débil donde se evaluó»), Datos y medición sin
+  medir (línea propia) y resto sin medir agrupado, dominancias sistemáticas «A > B en n/n».
+- **Careo (Codex, 3 rondas + verificación):** cobertura engañosa, ausentes no contados,
+  ranking mezclando objetivos, esquema laxo (`schema: true` colaba), score 0 tratado como
+  ausente → todo corregido con test en rojo previo.
