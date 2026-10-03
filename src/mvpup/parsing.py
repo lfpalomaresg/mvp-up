@@ -13,6 +13,7 @@ Cualquier otro texto añadido al header lo invalida.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
@@ -54,12 +55,15 @@ LIGERA_TEMPLATE: Template = (
 
 # Línea que separa los bloques de un agente que cubre 2 dimensiones agrupadas.
 GROUP_SEPARATOR = "# Dimensión: "
+# Lo que se ACEPTA al leer: también sin tilde, en mayúsculas o con espacios de más.
+_SEPARATOR_RE = re.compile(r"^#\s*dimensi[oó]n\s*:\s*(?P<ident>.+?)\s*$", re.IGNORECASE)
 
 _SCORE_NUM = r"(\d+(?:[.,]\d+)?)\s*/\s*10"
 _PAREN_TAIL_RE = re.compile(r"\s*\([^()]*\)$")
 _FINDING_RE = re.compile(
-    r"^[-*]\s*\[(?P<id>H\d+)\]\s*(?P<text>.+?)\s*[·|]\s*Impacto:\s*(?P<imp>[AMB])\b"
-    r"(?:\s*[·|]\s*Esfuerzo:\s*(?P<eff>[AMB])\b)?"
+    # Nivel: la sigla de la plantilla (A/M/B) o la palabra completa (Alto/Medio/Bajo).
+    r"^[-*]\s*\[(?P<id>H\d+)\]\s*(?P<text>.+?)\s*[·|]\s*Impacto:\s*(?P<imp>Alto|Medio|Bajo|[AMB])\b"
+    r"(?:\s*[·|]\s*Esfuerzo:\s*(?P<eff>Alto|Medio|Bajo|[AMB])\b)?"
     r"(?:\s*[·|]\s*Evidencia:\s*(?P<ev>.*))?$",
     re.IGNORECASE,
 )
@@ -156,11 +160,14 @@ def _parse_score(header_line: str, header: str) -> float:
 
 def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool) -> list[Finding]:
     findings: list[Finding] = []
+    unreadable: list[str] = []
     for line in lines[1:]:
         fm = _FINDING_RE.match(line)
         if not fm or (require_effort and not fm.group("eff")):
-            if line[:1] in "-*":
-                warnings.append(f"hallazgo con formato ilegible descartado: {line!r}")
+            # Un `[Hn]` que no se puede leer es un fallo de FORMATO (reintento), no un
+            # descarte silencioso que dejaría la dimensión sin hallazgos.
+            if re.match(r"^[-*]\s*\[H\d+\]", line, re.IGNORECASE):
+                unreadable.append(f"hallazgo ilegible: {line!r}")
             continue
         evidence = (fm.group("ev") or "").strip()
         if _NO_EVIDENCE_RE.match(evidence):
@@ -170,11 +177,13 @@ def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool)
             Finding(
                 id=fm.group("id").upper(),
                 text=fm.group("text").strip(),
-                impact=Level(fm.group("imp").upper()),
-                effort=Level(fm.group("eff").upper()) if fm.group("eff") else None,
+                impact=Level(fm.group("imp")[0].upper()),
+                effort=Level(fm.group("eff")[0].upper()) if fm.group("eff") else None,
                 evidence=evidence,
             )
         )
+    if unreadable:
+        raise FormatError(unreadable)
     return findings
 
 
@@ -233,6 +242,20 @@ def parse_ligera_output(text: str) -> LigeraResult:
     )
 
 
+def _fold(text: str) -> str:
+    plain = unicodedata.normalize("NFKD", text.strip().lower())
+    return "".join(c for c in plain if not unicodedata.combining(c))
+
+
+def dimension_from_label(text: str) -> Dimension | None:
+    """Acepta el id (`producto_ux`) o la etiqueta (`Producto / UX`), sin mayúsculas ni tildes."""
+    folded = _fold(text)
+    for dim in Dimension:
+        if folded in (dim.value, _fold(dim.label)):
+            return dim
+    return None
+
+
 def _split_grouped(
     text: str, dims: tuple[Dimension, ...]
 ) -> tuple[dict[Dimension, list[str]], set[Dimension], list[str]]:
@@ -243,11 +266,11 @@ def _split_grouped(
     current: Dimension | None = None
     for raw in text.splitlines():
         line = raw.strip()
-        if line.startswith(GROUP_SEPARATOR):
-            ident = line[len(GROUP_SEPARATOR) :].strip()
-            try:
-                current = Dimension(ident)
-            except ValueError:
+        sep = _SEPARATOR_RE.match(line)
+        if sep:
+            ident = sep.group("ident")
+            current = dimension_from_label(ident)
+            if current is None:
                 structural.append(f"dimensión desconocida en separador: {ident!r}")
                 current = None
                 continue
@@ -275,7 +298,7 @@ def parse_grouped_partial(
     dimensión no se acepta. Los bloques desconocidos o no pedidos se ignoran y
     se reportan como problemas de estructura.
     """
-    if len(dims) == 1 and GROUP_SEPARATOR not in text:
+    if len(dims) == 1 and not any(_SEPARATOR_RE.match(ln.strip()) for ln in text.splitlines()):
         try:
             return {dims[0]: parse_agent_output(text)}, {}, []
         except FormatError as exc:

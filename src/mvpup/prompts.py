@@ -85,7 +85,7 @@ def build_task_prompt(task: AgentTask, intake: Intake) -> str:
     else:
         parts.append(
             "\nCubres DOS dimensiones. Devuelve un bloque por dimensión, cada uno precedido de "
-            f"su línea separadora literal, y dentro de cada bloque EXACTAMENTE este formato:\n"
+            "su línea separadora literal, y dentro de cada bloque EXACTAMENTE este formato:\n"
         )
         for d in dims:
             parts.append(f"{GROUP_SEPARATOR}{d.value}\n{fmt}\n")

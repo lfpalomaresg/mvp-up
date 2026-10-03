@@ -337,3 +337,38 @@ def save_report(report: Report, base_dir: Path | str) -> Path:
         json.dumps(to_json(report), ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return path
+
+
+ANCHOR_TITLE = "## ⚡ MVP-UP {score}/10 ({date}) — LEER AL RETOMAR"
+
+
+def anchor_ficha(
+    ficha: Path,
+    report_path: Path,
+    score: float | None,
+    when: date,
+    product: str | None = None,
+    repo: str | None = None,
+) -> bool:
+    """Fase 5.2: añade el anclaje «salta al retomar» al final de la ficha (idempotente).
+
+    Si la ficha no existe se crea la mínima (qué es / estado / repo / informe). Devuelve True
+    si escribió algo; un mismo informe no se ancla dos veces. Nunca reescribe contenido existente: solo añade al final.
+    """
+    title = ANCHOR_TITLE.format(score=fmt_score(score, 1) if score is not None else "—", date=when.isoformat())
+    pointer = f"Informe: `{report_path}`"
+    block = f"\n{title}\n{pointer} — la próxima sesión sobre este producto arranca leyéndolo.\n"
+    if ficha.exists():
+        text = ficha.read_text(encoding="utf-8")
+        if pointer in text:  # idempotente por INFORME, no por fecha/score
+            return False
+        ficha.write_text(text.rstrip("\n") + "\n" + block, encoding="utf-8")
+        return True
+    ficha.parent.mkdir(parents=True, exist_ok=True)
+    name = product or ficha.stem
+    ficha.write_text(
+        f"# {name}\n\n- Qué es: N/D (completar)\n- Estado: auditado con MVP-UP\n"
+        f"- Repo: `{repo or 'N/D'}`\n- Informe: `{report_path}`\n{block}",
+        encoding="utf-8",
+    )
+    return True

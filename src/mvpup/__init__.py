@@ -5,4 +5,4 @@ validación del formato de los agentes, puntuación ponderada, matriz, roadmap,
 comparación entre pasadas e informe. Los agentes se enchufan vía `runners`.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

@@ -139,9 +139,13 @@ uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev,anthropic]"
 # Planificar (sin red, sin coste): selección, lotes, avisos y coste orientativo
 mvpup plan --product "Mi producto" --stage mvp --objective ingresos --show-prompts
 
-# Ejecutar con agentes reales (Sonnet por defecto; Fable/Mythos/Haiku bloqueados)
+# Ejecutar con agentes reales (Sonnet por defecto; Fable/Mythos/Haiku bloqueados).
+# En full con objetivo vendible/inversión, económica y comercial van con Opus (SKILL.md).
 cp .env.example .env   # y rellena ANTHROPIC_API_KEY — .env está gitignoreado
 mvpup run --product "Mi producto" --stage mvp --objective ingresos --repo ../mi-producto
+
+# Opcional: anclar «⚡ MVP-UP X/10 — LEER AL RETOMAR» al final de la ficha del producto
+mvpup run ... --ficha ruta/a/ficha.md --anclar
 
 # Validar la salida de un agente lanzado a mano (p.ej. subagente de Claude Code)
 mvpup validate salida.md --dims comercial,marketing
@@ -196,6 +200,7 @@ propios checklists — esas skills solo enriquecen el resultado.
 - ✅ v1.1 (2026-07) — calibrada con 11 proyectos reales (1 piloto express + 3 express + 7 ligeras, 18 agentes)
 - 🔬 Autoevaluada con su propio modo ligera: 6/10 (sí, se audita a sí misma)
 - 📝 Roadmap v1.2: validador de formato de outputs · tabla completa de ponderaciones por objetivo de valor · límites operativos y coste por modo documentados
+- 🐍 Implementación Python 0.2.0 (2026-10): núcleo completo + CLI, 230+ tests, construida en 10 loops de automejora con revisión adversarial (Codex/Gemini) — bitácora en [`docs/LOOPS.md`](docs/LOOPS.md)
 
 ## Autor y créditos
 

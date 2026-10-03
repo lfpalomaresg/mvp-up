@@ -150,3 +150,22 @@ revisión adversarial (careo) → sello conclave → commit.
 - **Careo r2 (Codex NO_APTO, 1 IMPORTANTE):** la comprobación de `--out` fallaba en
   ABIERTO si git daba error o timeout → fail-closed (solo se omite si git no está
   instalado) y `LC_ALL=C` para no depender del idioma de los mensajes de git.
+
+## Loop 10 — Audit global con revisor distinto (Gemini) + endurecimiento final
+- **Audit:** revisión GLOBAL del código completo contra la especificación por un modelo
+  distinto del de los loops (Gemini), buscando contratos rotos ENTRE fases.
+- **Hallazgos:** 1 CRÍTICO **descartado tras verificación** (el «regex corrupto» era un
+  artefacto: la CLI de Gemini expande `@ruta` dentro del prompt; el fichero real está bien
+  y su test pasa) · 5 válidos, aplicados con test en rojo previo:
+  anclaje «⚡ MVP-UP X/10 — LEER AL RETOMAR» en la ficha (opt-in `--anclar`, crea ficha
+  mínima si no existe, idempotente) · full + objetivo vendible/inversión → económica y
+  comercial con Opus (`model_by_key`, sujeto a la política) · `Impacto: Alto` aceptado y un
+  `[Hn]` ilegible ahora provoca reintento en vez de dejar la dimensión vacía en silencio ·
+  separadores agrupados sin depender de mayúsculas/tildes · coste orientativo escalado al
+  nº real de agentes.
+- **Además:** CI en GitHub Actions (3.11-3.13, sin secretos), versión 0.2.0, lint limpio,
+  sección de implementación en `SKILL.md`.
+- **Careo (Codex r1 NO_APTO):** `--anclar` sin `--ficha` se detectaba tras pagar la pasada →
+  validación previa · ficha mínima con repo (qué es / estado / repo, como pide SKILL.md) ·
+  mensaje honesto cuando el anclaje ya existía.
+  Idempotencia por informe (no por fecha/score): dos pasadas el mismo día se anclan ambas.

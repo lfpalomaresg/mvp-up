@@ -136,6 +136,14 @@ Respetar la regla WIP del foco estratégico: si el producto no está en los carr
 
 ---
 
+## Implementación en código (opcional)
+
+El repo incluye `src/mvpup/` (Python ≥3.11): las partes deterministas de este proceso
+(selección, prompts, validador de formato, reintento, score, matriz, roadmap, comparación,
+informe, cartera) como librería y CLI (`mvpup plan|run|validate|cartera`). El orquestador
+puede usarla para validar salidas de subagentes (`mvpup validate`) o ejecutar la pasada
+completa con agentes de la API (`mvpup run`). Ver README § Implementación en código.
+
 ## Outputs
 
 - `AI_OS/PROJECTS/_escalado/<producto>/YYYY-MM-DD-informe.md` — informe versionado (scores, matriz, roadmap, evolución)

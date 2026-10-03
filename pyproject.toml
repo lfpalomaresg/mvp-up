@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mvpup"
-version = "0.1.0"
+version = "0.2.0"
 description = "Orquestador MVP-UP: auditoría de producto en 10 dimensiones con agentes de solo análisis"
 readme = "README.md"
 requires-python = ">=3.11"

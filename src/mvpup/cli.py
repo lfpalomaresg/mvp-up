@@ -29,12 +29,33 @@ from .selection import build_plan
 REPORTS_ENV = "MVPUP_REPORTS_DIR"
 DEFAULT_REPORTS_DIR = "informes"
 
-# Coste orientativo medido en la calibración 2026-07 (agentes Sonnet), SKILL.md.
+# Coste orientativo medido en la calibración 2026-07 (agentes Sonnet), SKILL.md:
+# ligera ≈ 60-80k · express (3-5 agentes) ≈ 250-400k · full (10) ≈ ~1M → ~60-100k/agente.
 COST_HINT = {
     Mode.LIGERA: "≈ 60-80k tokens",
     Mode.EXPRESS: "≈ 250-400k tokens",
     Mode.FULL: "≈ 1M tokens (la pasada cara)",
 }
+TOKENS_PER_AGENT_K = (60, 100)
+
+CRITICAL_OBJECTIVES = (Objective.VENDIBLE, Objective.INVERSION)
+CRITICAL_MODEL = "claude-opus-5-5"
+
+
+def cost_hint(mode: Mode, agents: int) -> str:
+    """Coste orientativo; si el plan se sale de lo calibrado, se escala por agente."""
+    calibrated = {Mode.LIGERA: (1, 1), Mode.EXPRESS: (3, 5), Mode.FULL: (10, 10)}[mode]
+    if calibrated[0] <= agents <= calibrated[1]:
+        return f"{COST_HINT[mode]} · {agents} agentes"
+    lo, hi = (agents * k for k in TOKENS_PER_AGENT_K)
+    return f"≈ {lo}-{hi}k tokens · {agents} agentes (fuera de lo calibrado para {mode.value})"
+
+
+def critical_models(intake: Intake) -> dict[str, str]:
+    """SKILL.md: full + decisión crítica (venta/inversión) → económica y comercial con Opus."""
+    if intake.mode is not Mode.FULL or intake.objective not in CRITICAL_OBJECTIVES:
+        return {}
+    return {Dimension.ECONOMICA.value: CRITICAL_MODEL, Dimension.COMERCIAL.value: CRITICAL_MODEL}
 
 
 def _dims(value: str) -> frozenset[Dimension]:
@@ -89,7 +110,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
     intake = _intake(args)
     plan = build_plan(intake)
     print(f"Producto: {intake.product} · etapa {intake.stage.value} · objetivo {intake.objective.value}")
-    print(f"Modo: {intake.mode.value} · coste orientativo {COST_HINT[intake.mode]}")
+    print(f"Modo: {intake.mode.value} · coste orientativo {cost_hint(intake.mode, len(plan.tasks))}")
+    for key, model in critical_models(intake).items():
+        print(f"Decisión crítica: el agente {key} usará {model}")
     print("Dimensiones: " + ", ".join(d.label for d in plan.selected))
     if plan.not_applicable:
         print("N/A: " + ", ".join(d.label for d in plan.not_applicable))
@@ -120,7 +143,7 @@ def _runner(args: argparse.Namespace, intake: Intake):
     if not os.environ.get(API_KEY_ENV):
         raise CliError(f"falta {API_KEY_ENV}: defínela en .env (gitignoreado) o en el entorno")
     snapshot = repo_snapshot(intake.repo_path) if intake.repo_path else ""
-    return AnthropicRunner(model=args.model, snapshot=snapshot)
+    return AnthropicRunner(model=args.model, snapshot=snapshot, model_by_key=critical_models(intake))
 
 
 class CliError(Exception):
@@ -166,18 +189,29 @@ def check_out_dir(out: Path) -> None:
 
 def cmd_run(args: argparse.Namespace) -> int:
     from .orchestrator import run_pass
-    from .report import build_report, save_report
+    from .report import anchor_ficha, build_report, save_report
 
     intake = _intake(args)
     if args.model:
         check_model(args.model)  # la política de modelos va antes que cualquier otra cosa
+    if args.anclar and not intake.ficha_path:
+        # Error de uso: se detecta ANTES de lanzar (y pagar) la pasada.
+        raise CliError("--anclar requiere --ficha <ruta de la ficha del producto>")
     out = Path(args.out or os.environ.get(REPORTS_ENV) or DEFAULT_REPORTS_DIR)
     check_out_dir(out)
     runner = _runner(args, intake)
-    print(f"Lanzando pasada {intake.mode.value} ({COST_HINT[intake.mode]})…", file=sys.stderr)
-    result = run_pass(intake, runner, agent_timeout=args.timeout)
+    plan = build_plan(intake)
+    print(f"Lanzando pasada {intake.mode.value} ({cost_hint(intake.mode, len(plan.tasks))})…", file=sys.stderr)
+    result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
     report = build_report(result, base_dir=out)
     path = save_report(report, out)
+    if args.anclar:
+        written = anchor_ficha(Path(intake.ficha_path), path, report.global_score, report.date,
+                               product=intake.product, repo=intake.repo_path)
+        if written:
+            print(f"Anclaje «LEER AL RETOMAR» añadido a {intake.ficha_path}")
+        else:
+            print(f"La ficha {intake.ficha_path} ya tenía el anclaje de este informe: sin cambios")
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
@@ -252,6 +286,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--model", help="modelo de los agentes (por defecto claude-sonnet-5-5)")
     p_run.add_argument("--out", help=f"carpeta de informes (o ${REPORTS_ENV}; por defecto ./{DEFAULT_REPORTS_DIR})")
     p_run.add_argument("--timeout", type=float, default=900.0, help="segundos por intento de agente")
+    p_run.add_argument("--anclar", action="store_true",
+                       help="añade a --ficha la sección «⚡ MVP-UP … LEER AL RETOMAR» (opt-in)")
     p_run.set_defaults(func=cmd_run)
 
     p_val = sub.add_parser("validate", help="valida la salida de un agente contra su plantilla")

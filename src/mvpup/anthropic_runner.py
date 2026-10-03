@@ -173,8 +173,11 @@ class AnthropicRunner:
         client: Any = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         effort: str = "medium",
+        model_by_key: dict[str, str] | None = None,
     ):
         self.model = check_model(model) if model else agent_model()
+        # Modelo por agente (task_key), p.ej. Opus para económica/comercial en full crítica.
+        self.model_by_key = {k: check_model(m) for k, m in (model_by_key or {}).items()}
         self.snapshot = snapshot
         self.max_tokens = max_tokens
         self.effort = effort
@@ -207,7 +210,7 @@ class AnthropicRunner:
 
     def run(self, prompt: str, *, task_key: str) -> str:
         response = self.client.messages.create(
-            model=self.model,
+            model=self.model_by_key.get(task_key, self.model),
             max_tokens=self.max_tokens,
             system=SYSTEM_PROMPT,
             output_config={"effort": self.effort},
