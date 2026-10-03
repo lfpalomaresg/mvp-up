@@ -110,24 +110,61 @@ mvp-up/
 
 ## Implementación en código (`src/mvpup`)
 
-Además de la skill, el repo contiene una implementación Python (≥3.11, sin dependencias
-en el núcleo) de las partes deterministas del orquestador, para que el método sea
-reproducible y testeable:
+Además de la skill, el repo contiene una implementación Python (≥3.11, núcleo sin
+dependencias) del orquestador, para que el método sea reproducible y testeable:
 
 | Módulo | Fase | Qué hace |
 |---|---|---|
 | `dimensions.py` | — | Catálogo FIJO: dimensiones, etapas, objetivos, tabla express, pesos ×2, parejas afines |
 | `intake.py` | 0 | Intake validado (full exige confirmación explícita) |
 | `selection.py` | 1 | Selección por etapa, N/A sin software, agrupación (express 3-5 agentes), lotes de 5 |
-| `parsing.py` | 1 | Validador de headers EXACTOS (plantilla completa y ligera) + parser de hallazgos |
-| `scoring.py` | 2 | Score global ponderado por objetivo de valor |
+| `prompts.py` | 1 | Prompts por dimensión (copia literal de `dimensiones.md`), agrupados y ligera |
+| `parsing.py` | 1 | Validador de headers EXACTOS + parser (completo, agrupado con rescate parcial, ligera) |
+| `orchestrator.py` | 1 | Lotes ≤5, reintento con prompt reforzado, «sin evaluar», timeout por intento |
+| `runners.py` · `anthropic_runner.py` | 1 | `FakeRunner` (tests) y runner real con la API de Claude + instantánea del repo sin secretos |
+| `scoring.py` · `consolidation.py` | 2 | Score ponderado, matriz impacto×esfuerzo, hallazgos estructurales |
+| `roadmap.py` | 3 | H1/H2/H3, backlog, apuestas no justificadas, regla WIP, TOP-5 |
+| `compare.py` | 4 | Δ por dimensión, caídas en rojo, cambio de objetivo (recalcula), aviso >6 meses |
+| `report.py` | 5 | Informe MD con los headers de la plantilla + JSON gemelo versionado |
+| `portfolio.py` | 2 | Síntesis de cartera (2+ proyectos): patrones transversales, cobertura |
+| `redaction.py` | — | Redacción best-effort de secretos (instantánea y mensajes de error) |
+| `cli.py` | — | `mvpup plan` · `run` · `validate` · `cartera` |
+
+### Uso
 
 ```bash
-uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev,anthropic]"
 .venv/bin/pytest -q
+
+# Planificar (sin red, sin coste): selección, lotes, avisos y coste orientativo
+mvpup plan --product "Mi producto" --stage mvp --objective ingresos --show-prompts
+
+# Ejecutar con agentes reales (Sonnet por defecto; Fable/Mythos/Haiku bloqueados)
+cp .env.example .env   # y rellena ANTHROPIC_API_KEY — .env está gitignoreado
+mvpup run --product "Mi producto" --stage mvp --objective ingresos --repo ../mi-producto
+
+# Validar la salida de un agente lanzado a mano (p.ej. subagente de Claude Code)
+mvpup validate salida.md --dims comercial,marketing
+
+# Síntesis de cartera con los últimos informes de 2+ productos
+mvpup cartera --save
 ```
 
-Secretos: solo en `.env` (gitignoreado). Ver `.env.example`. Los tests usan datos ficticios.
+Códigos de salida: `0` OK · `2` error de uso (intake, modelo vetado, falta la API key,
+ficheros, carpeta de informes no gitignoreada) · `3` pasada sin ninguna dimensión evaluada.
+
+Los informes se guardan en `./informes/<producto>/YYYY-MM-DD-informe.md` (+ `.json`), o en
+`--out` / `$MVPUP_REPORTS_DIR`. Si esa carpeta está dentro de un repo git, `run` exige que
+esté en `.gitignore` (los informes pueden contener datos reales).
+
+Secretos: la API key solo en `.env` (gitignoreado) o en el entorno. Los agentes reales no
+tienen herramientas: reciben una instantánea de solo lectura del repo que **no sigue
+symlinks**, excluye ficheros y carpetas con nombre de secreto (`.env`, `*.pem`,
+`credentials/`…) y **redacta** patrones de claves, asignaciones sensibles (`api_key=…`,
+`"token": "…"`) y credenciales en URLs. Es protección *best-effort*, no una garantía: no
+audites con agentes de la API un repo con secretos incrustados de forma exótica sin
+revisarlo antes. Los tests usan datos ficticios.
+Bitácora de construcción y careos: [`docs/LOOPS.md`](docs/LOOPS.md).
 
 ## Instalación
 

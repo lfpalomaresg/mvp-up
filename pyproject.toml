@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+mvpup = "mvpup.cli:main"
+
 [project.optional-dependencies]
 anthropic = ["anthropic>=1.11"]  # output_config.effort verificado en 1.11
 dev = ["pytest>=8"]

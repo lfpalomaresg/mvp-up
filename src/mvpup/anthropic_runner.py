@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import fnmatch
 import os
-import re
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from .config import API_KEY_ENV, agent_model, check_model
+from .redaction import REDACTED, redact  # noqa: F401 — reexportado
 
 DEFAULT_MAX_TOKENS = 16000
 SNAPSHOT_MAX_CHARS = 120_000
@@ -42,36 +42,6 @@ TEXT_SUFFIXES = {
     ".html", ".css", ".sql", ".sh", ".cfg", ".ini", ".go", ".rb", ".php", ".java", ".kt",
 }
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next"}
-
-
-# Patrones de claves conocidos (se redactan donde aparezcan).
-_SECRET_VALUE_RE = re.compile(
-    r"(?:sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"
-    r"|AKIA[0-9A-Z]{16}"
-    r"|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}"
-    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
-    r"|AIza[A-Za-z0-9_-]{35}"
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----)"
-)
-# Asignaciones a claves sensibles en cualquier posición: `api_key = v`, `api_key="v"`
-# dentro de una llamada, `"api_key": "v"` en JSON, `SECRET_TOKEN='v'`… (se conserva el nombre).
-_SECRET_ASSIGN_RE = re.compile(
-    r"(?i)((?:api[_-]?key|secret|token|passw(?:or)?d|pwd|private[_-]?key|access[_-]?key)"
-    r"[\w.-]*[\"']?\s*[:=]\s*)"
-    # valor entrecomillado COMPLETO (espacios y comas incluidos) o valor sin comillas
-    r"(\"[^\"\n]*\"|'[^'\n]*'|[^\s\"',;#)}\]]{6,})"
-)
-REDACTED = "[REDACTADO]"
-
-
-def redact(text: str) -> str:
-    text = _SECRET_VALUE_RE.sub(REDACTED, text)
-    def _sub(m: re.Match[str]) -> str:
-        value = m.group(2)
-        quote = value[0] if value[:1] in ("'", '"') else ""
-        return f"{m.group(1)}{quote}{REDACTED}{quote}"
-
-    return _SECRET_ASSIGN_RE.sub(_sub, text)
 
 
 class AgentRefusedError(RuntimeError):

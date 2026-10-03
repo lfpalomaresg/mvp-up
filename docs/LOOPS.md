@@ -133,3 +133,20 @@ revisión adversarial (careo) → sello conclave → commit.
   fusionadas. JSON con lista de dimensiones por acción.
 - **Careo (Codex, 2 rondas):** la fusión perdía los costes de las entradas relacionadas →
   coste combinado por dimensión (nunca sumado ni inventado; N/D si ninguno).
+
+## Loop 9 — CLI (`mvpup plan · run · validate · cartera`)
+- **Audit:** el orquestador solo era usable como librería; sin punto de entrada no hay
+  forma práctica de lanzar una pasada, validar salidas de subagentes ni ver la cartera.
+- **Hecho:** `cli.py` + `python -m mvpup` + entry point `mvpup`: `plan` (sin red: selección,
+  lotes, avisos, coste orientativo de SKILL.md, `--show-prompts`), `run` (fake/anthropic,
+  informe versionado, TOP-5 pendiente de autorización), `validate` (plantilla completa,
+  agrupada o ligera) y `cartera`. README con uso y códigos de salida.
+- **Careo r1 (Codex NO_APTO, 1 CRÍTICO + 4 IMPORTANTES):** el texto de excepciones del SDK
+  podía llevar credenciales a consola/JSON → `redaction.py` compartido (+ credenciales en
+  URLs) aplicado al log · sin API key la pasada «tenía éxito» con todo sin evaluar →
+  fail-fast (código 2) y código 3 si no se evalúa nada · `--out` dentro de un repo debe estar
+  gitignoreado · errores de E/S y JSON → código 2 sin traceback · README sin promesas
+  absolutas sobre secretos (best-effort explícito).
+- **Careo r2 (Codex NO_APTO, 1 IMPORTANTE):** la comprobación de `--out` fallaba en
+  ABIERTO si git daba error o timeout → fail-closed (solo se omite si git no está
+  instalado) y `LC_ALL=C` para no depender del idioma de los mensajes de git.

@@ -25,6 +25,7 @@ from .parsing import (
     parse_ligera_output,
 )
 from .prompts import build_task_prompt
+from .redaction import redact
 from .runners import AgentRunner
 from .selection import AgentTask, Plan, build_plan
 
@@ -108,7 +109,8 @@ def _call(ctx: _Ctx, prompt: str, key: str, log: list[str], attempt: int) -> str
             lambda: ctx.runner.run(prompt, task_key=key), ctx.timeout, ctx.slots
         )
     except Exception as exc:  # noqa: BLE001 — un agente caído no tumba la pasada
-        log.append(f"{key}: el agente falló en intento {attempt}: {type(exc).__name__}: {exc}")
+        # El texto de una excepción puede llevar URLs con credenciales o cabeceras: se redacta.
+        log.append(redact(f"{key}: el agente falló en intento {attempt}: {type(exc).__name__}: {exc}"))
         return None
 
 
