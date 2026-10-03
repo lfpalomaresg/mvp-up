@@ -1,0 +1,230 @@
+"""Validador de formato y parser de la salida de los agentes.
+
+Regla de la skill: el output DEBE contener los headers `##` exactos de su
+plantilla (completa o ligera). Si falta alguno, o el contenido viola la
+plantilla (score fuera de rango, más de 7 hallazgos), es formato inválido y el
+orquestador reintenta una vez. Regla del informe: hallazgo sin evidencia → fuera.
+
+"Exacto" tolera solo una cosa: omitir la aclaración entre paréntesis de la
+plantilla (`## Hallazgos` vale por `## Hallazgos (máx 7, ordenados por impacto)`).
+Cualquier otro texto añadido al header lo invalida.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from enum import Enum
+from functools import lru_cache
+
+from .dimensions import MAX_FINDINGS
+
+
+class FormatError(ValueError):
+    def __init__(self, problems: list[str]):
+        self.problems = problems
+        super().__init__("; ".join(problems))
+
+
+class Level(str, Enum):
+    ALTO = "A"
+    MEDIO = "M"
+    BAJO = "B"
+
+
+# (clave interna, header EXACTO de la plantilla). Se acepta también el header
+# sin su aclaración final entre paréntesis, y nada más.
+Template = tuple[tuple[str, str], ...]
+
+FULL_TEMPLATE: Template = (
+    ("score", "## Score: X/10 (rúbrica al pie)"),
+    ("findings", "## Hallazgos (máx 7, ordenados por impacto)"),
+    ("quick_wins", "## Quick wins (impacto A/M con esfuerzo B)"),
+    ("risks", "## Riesgos si no se actúa"),
+    ("missing", "## Datos que faltan para evaluar mejor"),
+)
+
+LIGERA_TEMPLATE: Template = (
+    ("score", "## Score orientativo: X/10"),
+    ("state", "## Qué es y estado real (3-4 líneas: qué hay construido DE VERDAD vs lo que dice la ficha)"),
+    ("findings", "## Hallazgos clave (3-5, con evidencia)"),
+    ("value", "## Valor potencial (1-2 líneas: a qué objetivo del operador sirve — o si conviene archivarla)"),
+    ("resume", "## 3 tareas de reanudación (lo primero al retomar, concretas y ordenadas — o de CIERRE si recomienda archivar)"),
+)
+
+_SCORE_NUM = r"(\d+(?:[.,]\d+)?)\s*/\s*10"
+_PAREN_TAIL_RE = re.compile(r"\s*\([^()]*\)$")
+_FINDING_RE = re.compile(
+    r"^[-*]\s*\[(?P<id>H\d+)\]\s*(?P<text>.+?)\s*[·|]\s*Impacto:\s*(?P<imp>[AMB])\b"
+    r"(?:\s*[·|]\s*Esfuerzo:\s*(?P<eff>[AMB])\b)?"
+    r"(?:\s*[·|]\s*Evidencia:\s*(?P<ev>.*))?$",
+    re.IGNORECASE,
+)
+# Evidencia que en realidad declara su ausencia ("N/D (no comprobado)", "sin evidencia...").
+_NO_EVIDENCE_RE = re.compile(
+    r"^(?:n\s*/?\s*d\b|n/a\b|sin evidencia|ninguna\b|no (?:verificad|comprobad|disponible)|[-—–]+$|$)",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class Finding:
+    id: str
+    text: str
+    impact: Level
+    effort: Level | None
+    evidence: str
+
+
+@dataclass
+class DimensionResult:
+    score: float
+    findings: list[Finding]
+    quick_wins: list[str] = field(default_factory=list)
+    risks: list[str] = field(default_factory=list)
+    missing_data: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class LigeraResult:
+    score: float
+    state: str
+    findings: list[Finding]
+    value: str
+    resume_tasks: list[str]
+    warnings: list[str] = field(default_factory=list)
+
+
+def _header_forms(header: str) -> tuple[str, ...]:
+    """Formas aceptadas del header: completa y sin su paréntesis final."""
+    short = _PAREN_TAIL_RE.sub("", header)
+    return (header, short) if short != header else (header,)
+
+
+@lru_cache(maxsize=None)
+def _header_regex(header: str) -> re.Pattern[str]:
+    alternatives = []
+    for form in _header_forms(header):
+        alternatives.append(re.escape(form).replace(re.escape("X/10"), _SCORE_NUM))
+    # Si la forma no lleva score, el grupo 1 no existe: lo normalizamos con `(?:)`.
+    pattern = "|".join(f"(?:{a})" for a in alternatives)
+    return re.compile(rf"^(?:{pattern})$")
+
+
+def _match_header(line: str, header: str) -> re.Match[str] | None:
+    return _header_regex(header).match(line)
+
+
+def _sections(text: str, template: Template) -> dict[str, list[str]]:
+    """Trocea por headers `##` de la plantilla; un header desconocido corta la sección."""
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if re.match(r"^##(?!#)", line):
+            current = next((k for k, h in template if _match_header(line, h)), None)
+            if current is not None:
+                sections.setdefault(current, [line])
+            continue
+        if current is not None and line:
+            sections[current].append(line)
+    return sections
+
+
+def _bullets(lines: list[str]) -> list[str]:
+    return [re.sub(r"^(?:[-*]|\d+[.)])\s*", "", ln) for ln in lines[1:] if re.match(r"^(?:[-*]|\d+[.)])\s", ln)]
+
+
+def _prose(lines: list[str]) -> str:
+    return " ".join(lines[1:]).strip()
+
+
+def _parse_score(header_line: str, header: str) -> float:
+    m = _match_header(header_line, header)
+    raw = next((g for g in m.groups() if g), None) if m else None
+    if raw is None:
+        raise FormatError([f"score ilegible: {header_line!r}"])
+    score = float(raw.replace(",", "."))
+    if not 0 <= score <= 10:
+        raise FormatError([f"score fuera de rango 0-10: {score}"])
+    return score
+
+
+def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool) -> list[Finding]:
+    findings: list[Finding] = []
+    for line in lines[1:]:
+        fm = _FINDING_RE.match(line)
+        if not fm or (require_effort and not fm.group("eff")):
+            if line[:1] in "-*":
+                warnings.append(f"hallazgo con formato ilegible descartado: {line!r}")
+            continue
+        evidence = (fm.group("ev") or "").strip()
+        if _NO_EVIDENCE_RE.match(evidence):
+            warnings.append(f"{fm.group('id').upper()} descartado: sin evidencia")
+            continue
+        findings.append(
+            Finding(
+                id=fm.group("id").upper(),
+                text=fm.group("text").strip(),
+                impact=Level(fm.group("imp").upper()),
+                effort=Level(fm.group("eff").upper()) if fm.group("eff") else None,
+                evidence=evidence,
+            )
+        )
+    return findings
+
+
+def _require(sections: dict[str, list[str]], template: Template) -> None:
+    problems = [f"falta el header '{h}'" for k, h in template if k not in sections]
+    if problems:
+        raise FormatError(problems)
+
+
+def _count_finding_lines(lines: list[str]) -> int:
+    return sum(1 for ln in lines[1:] if re.match(r"^[-*]\s*\[H\d+\]", ln, re.IGNORECASE))
+
+
+def parse_agent_output(text: str) -> DimensionResult:
+    """Parsea la salida de un agente con la plantilla completa (express/full)."""
+    sections = _sections(text, FULL_TEMPLATE)
+    _require(sections, FULL_TEMPLATE)
+    score = _parse_score(sections["score"][0], FULL_TEMPLATE[0][1])
+    n = _count_finding_lines(sections["findings"])
+    if n > MAX_FINDINGS:
+        raise FormatError([f"{n} hallazgos: la plantilla permite máx {MAX_FINDINGS}"])
+    warnings: list[str] = []
+    findings = _parse_findings(sections["findings"], warnings, require_effort=True)
+    return DimensionResult(
+        score=score,
+        findings=findings,
+        quick_wins=_bullets(sections["quick_wins"]),
+        risks=_bullets(sections["risks"]),
+        missing_data=_bullets(sections["missing"]),
+        warnings=warnings,
+    )
+
+
+def parse_ligera_output(text: str) -> LigeraResult:
+    """Parsea la salida del agente único del modo ligera."""
+    sections = _sections(text, LIGERA_TEMPLATE)
+    _require(sections, LIGERA_TEMPLATE)
+    score = _parse_score(sections["score"][0], LIGERA_TEMPLATE[0][1])
+    n = _count_finding_lines(sections["findings"])
+    if not 3 <= n <= 5:
+        raise FormatError([f"{n} hallazgos: la plantilla ligera pide entre 3 y 5"])
+    warnings: list[str] = []
+    findings = _parse_findings(sections["findings"], warnings, require_effort=False)
+    if len(findings) < 3:
+        raise FormatError([f"solo {len(findings)} hallazgos con evidencia: la plantilla ligera pide 3-5"])
+    resume = _bullets(sections["resume"])
+    if len(resume) != 3:
+        raise FormatError([f"se esperaban 3 tareas de reanudación, hay {len(resume)}"])
+    return LigeraResult(
+        score=score,
+        state=_prose(sections["state"]),
+        findings=findings,
+        value=_prose(sections["value"]),
+        resume_tasks=resume,
+        warnings=warnings,
+    )

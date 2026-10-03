@@ -108,6 +108,27 @@ mvp-up/
         └── examples.md          ← 3 ejemplos + contraejemplos
 ```
 
+## Implementación en código (`src/mvpup`)
+
+Además de la skill, el repo contiene una implementación Python (≥3.11, sin dependencias
+en el núcleo) de las partes deterministas del orquestador, para que el método sea
+reproducible y testeable:
+
+| Módulo | Fase | Qué hace |
+|---|---|---|
+| `dimensions.py` | — | Catálogo FIJO: dimensiones, etapas, objetivos, tabla express, pesos ×2, parejas afines |
+| `intake.py` | 0 | Intake validado (full exige confirmación explícita) |
+| `selection.py` | 1 | Selección por etapa, N/A sin software, agrupación (express 3-5 agentes), lotes de 5 |
+| `parsing.py` | 1 | Validador de headers EXACTOS (plantilla completa y ligera) + parser de hallazgos |
+| `scoring.py` | 2 | Score global ponderado por objetivo de valor |
+
+```bash
+uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+.venv/bin/pytest -q
+```
+
+Secretos: solo en `.env` (gitignoreado). Ver `.env.example`. Los tests usan datos ficticios.
+
 ## Instalación
 
 1. Requiere [Claude Code](https://claude.com/claude-code).
