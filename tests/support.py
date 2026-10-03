@@ -1,4 +1,6 @@
-"""Salidas de agente de ejemplo. TODOS los datos son ficticios."""
+"""Salidas de agente e informes de ejemplo. TODOS los datos son ficticios."""
+
+import json
 
 VALID_OUTPUT = """\
 ## Score: 6/10 (rúbrica al pie)
@@ -31,3 +33,12 @@ Sirve al objetivo de reducir trabajo manual.
 2. Actualizar la ficha
 3. Definir una métrica
 """
+
+
+def write_report(base, slug, date, scores, global_score, objective="ingresos"):
+    """Escribe un informe JSON mínimo (ficticio) como los que genera `save_report`."""
+    folder = base / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    data = {"schema": 1, "product": slug.replace("-", " ").title(), "slug": slug, "date": date,
+            "objective": objective, "global_score": global_score, "scores": scores}
+    (folder / f"{date}-informe.json").write_text(json.dumps(data), encoding="utf-8")

@@ -69,3 +69,28 @@ revisión adversarial (careo) → sello conclave → commit.
 - **Careo r2 (Codex NO_APTO, 1 IMPORTANTE):** las dimensiones de un estructural en el TOP-5
   salían también de entradas no programadas → ahora solo cuentan las programadas, y con <2
   dimensiones deja de ser estructural.
+
+## Loop 5 — Informe versionado + comparación (Fases 4-5)
+- **Audit:** hay roadmap pero no entregable: ni informe, ni versionado, ni Δ entre pasadas
+  — sin esto MVP-UP es «una foto», justo lo que la skill dice no ser.
+- **Hecho:** `report.py` (MD con TODOS los headers de `plantilla-informe.md` en orden —
+  test lo comprueba contra la plantilla—, JSON gemelo, numeración de pasadas, nunca
+  sobrescribe, slug a prueba de `../`, informe ligera con sus headers, datos pendientes
+  deduplicados) y `compare.py` (Δ por dimensión, caída en 🔴 con causa probable, cambio de
+  objetivo → «no comparables directamente» + recálculo con pesos nuevos, cambio de etapa,
+  aviso >6 meses, acciones del roadmap anterior que ya no aparecen = candidatas a hechas
+  «a confirmar por el operador», JSON anterior corrupto → aviso, no excepción).
+- **Dogfooding:** ejecución extremo a extremo con `FakeRunner` → detectados datos pendientes
+  duplicados (corregido) y acciones estructurales repetidas por dimensión en el roadmap
+  (→ candidato a loop posterior).
+- **Careo r1 (Codex NO_APTO, 3 IMPORTANTES + 1 MENOR, todos aplicados):** una pasada solo en
+  `.md` (canónico) ahora cuenta y avisa «sin JSON gemelo» · con cambio de objetivo la tabla
+  muestra `n/c (8→6)` en vez de Δ con 🔴 · la causa de una caída ya no se inventa: solo
+  hallazgos de impacto alto NUEVOS respecto a la pasada anterior (el JSON guarda ahora los
+  hallazgos) y siempre con su evidencia · «6 meses» = meses naturales, no 183 días.
+- **Careo r2 (Codex NO_APTO, 2 IMPORTANTES):** con objetivo cambiado la Evolución ya no
+  narra caídas en 🔴 ni causas (lista variaciones «sin valorar») · solo los `.md` cuentan
+  como pasada; un `.json` huérfano se ignora.
+- **Careo r3 (Codex NO_APTO, 1 IMPORTANTE):** `*-informe*.md` aceptaba borradores/backups
+  como pasadas → `REPORT_NAME_RE` exige `YYYY-MM-DD-informe[-N]` (compartido con cartera).
+  Ronda 4 = solo verificación de este arreglo.
