@@ -76,8 +76,8 @@ def test_top_five_puts_structural_first_then_quick_wins():
     results[D.MARKETING] = res(f("H1", "Sin analítica web instalada", A, M))
     results[D.DATOS] = res(f("H1", "No hay analítica web instalada", A, M))
     matrix = build_matrix(results, Objective.INGRESOS)
-    rm = build_roadmap(matrix, Objective.INGRESOS)
-    top = top_five(rm, structural_findings(results))
+    rm = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
+    top = top_five(rm)
     assert len(top) == 5
     assert "analítica" in top[0].lower()
     assert top[1].startswith("Publicar precios")
@@ -97,9 +97,9 @@ def test_structural_only_enters_top_if_scheduled():
         D.OPERATIVA: res(f("H1", "Migrar CRM legado entero", B, A)),
     }
     matrix = build_matrix(results, Objective.INGRESOS)
-    rm = build_roadmap(matrix, Objective.INGRESOS)
     assert structural_findings(results)  # existe el estructural…
-    assert top_five(rm, structural_findings(results)) == []  # …pero es «descartar»
+    rm = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
+    assert top_five(rm) == []  # …pero es «descartar»
 
 
 def test_top_five_marks_queued_when_out_of_wip():
@@ -121,6 +121,66 @@ def test_structural_dimensions_only_count_scheduled_entries():
         D.OPERATIVA: res(f("H1", "Sin CRM centralizado", B, A)),  # descartar
     }
     matrix = build_matrix(results, Objective.INGRESOS)
-    rm = build_roadmap(matrix, Objective.INGRESOS)
-    top = top_five(rm, structural_findings(results))
-    assert top == ["Sin CRM centralizado · Comercial · H1"]
+    rm = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
+    assert top_five(rm) == ["Sin CRM centralizado · Comercial · H1"]
+
+
+def _structural_case():
+    return {
+        D.COMERCIAL: res(f("H1", "Sin analítica web instalada", A, B)),
+        D.MARKETING: res(f("H1", "No hay analítica web instalada", A, M)),
+        D.TECNICA: res(f("H1", "Añadir CI", A, M)),
+    }
+
+
+def test_structural_entries_merge_into_one_roadmap_action():
+    results = _structural_case()
+    matrix = build_matrix(results, Objective.INGRESOS)
+    rm = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
+    actions = rm.all_items()
+    merged = [i for i in actions if i.related]
+    assert len(merged) == 1
+    assert merged[0].horizon is Horizon.H1  # el horizonte más temprano del grupo
+    assert {merged[0].entry.dimension, *[e.dimension for e in merged[0].related]} == {
+        D.COMERCIAL, D.MARKETING}
+    assert texts(actions).count("No hay analítica web instalada") == 0
+    assert len(actions) == 2  # analítica (fusionada) + CI
+
+
+def test_merged_action_lists_all_dimensions_it_raises():
+    results = _structural_case()
+    matrix = build_matrix(results, Objective.INGRESOS)
+    rm = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
+    merged = next(i for i in rm.all_items() if i.related)
+    assert merged.dimension_labels == "Comercial + Marketing y hype"
+
+
+def test_top_five_marks_merged_actions_as_structural():
+    results = _structural_case()
+    matrix = build_matrix(results, Objective.INGRESOS)
+    rm = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
+    top = top_five(rm)
+    assert top[0].startswith("[estructural] Sin analítica web instalada · Comercial + Marketing y hype")
+    assert len(top) == 2
+
+
+def test_merged_action_keeps_every_known_cost():
+    results = _structural_case()
+    matrix = build_matrix(results, Objective.INGRESOS)
+    rm = build_roadmap(
+        matrix, Objective.INGRESOS, structural=structural_findings(results),
+        costs={(D.COMERCIAL, "H1"): "2 h", (D.MARKETING, "H1"): "5 h"},
+    )
+    merged = next(i for i in rm.all_items() if i.related)
+    assert merged.cost == "Comercial: 2 h; Marketing y hype: 5 h"
+
+
+def test_merged_action_marks_partial_costs():
+    results = _structural_case()
+    matrix = build_matrix(results, Objective.INGRESOS)
+    rm = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results),
+                       costs={(D.MARKETING, "H1"): "5 h"})
+    merged = next(i for i in rm.all_items() if i.related)
+    assert merged.cost == "Marketing y hype: 5 h; Comercial: N/D"
+    rm2 = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
+    assert next(i for i in rm2.all_items() if i.related).cost == "N/D"

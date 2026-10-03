@@ -93,7 +93,9 @@ def build_report(
         return Report(pass_result, today, number, score)
     matrix = build_matrix(pass_result.results, intake.objective)
     structural = structural_findings(pass_result.results)
-    roadmap = build_roadmap(matrix, intake.objective, in_wip_lanes=intake.in_wip_lanes)
+    roadmap = build_roadmap(
+        matrix, intake.objective, in_wip_lanes=intake.in_wip_lanes, structural=structural
+    )
     report = Report(
         pass_result=pass_result,
         date=today,
@@ -102,7 +104,7 @@ def build_report(
         matrix=matrix,
         structural=structural,
         roadmap=roadmap,
-        top=top_five(roadmap, structural),
+        top=top_five(roadmap),
     )
     previous = previous_reports(base_dir, intake.product)
     if previous:
@@ -169,7 +171,7 @@ def _roadmap_lines(roadmap: Roadmap) -> list[str]:
         for i in items:
             tail = " · encolar" if i.queued else ""
             out.append(
-                f"- [ ] {i.entry.finding.text} · ~{i.cost} · sube {i.entry.dimension.label} · "
+                f"- [ ] {i.entry.finding.text} · ~{i.cost} · sube {i.dimension_labels} · "
                 f"ejecutable por: {i.owner}{tail}"
             )
         out.append("")
@@ -293,7 +295,12 @@ def to_json(report: Report) -> dict:
         "not_applicable": [d.value for d in pr.not_applicable],
         "unevaluated": [d.value for d in pr.unevaluated],
         "roadmap": [
-            {"horizon": i.horizon.value, "dimension": i.entry.dimension.value, "action": i.entry.finding.text}
+            {
+                "horizon": i.horizon.value,
+                "dimension": i.entry.dimension.value,
+                "dimensions": [d.value for d in i.dimensions],
+                "action": i.entry.finding.text,
+            }
             for i in report.roadmap.all_items()
         ],
         "findings": [

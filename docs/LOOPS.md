@@ -123,3 +123,13 @@ revisión adversarial (careo) → sello conclave → commit.
 - **Careo (Codex, 3 rondas + verificación):** cobertura engañosa, ausentes no contados,
   ranking mezclando objetivos, esquema laxo (`schema: true` colaba), score 0 tratado como
   ausente → todo corregido con test en rojo previo.
+
+## Loop 8 — Fusión de acciones estructurales en el roadmap (hallazgo de dogfooding)
+- **Audit:** la ejecución extremo a extremo del loop 5 mostró la misma acción repetida
+  una vez por dimensión cuando un hallazgo es estructural: ruido justo en el entregable.
+- **Hecho:** `build_roadmap(..., structural=...)` fusiona las entradas PROGRAMADAS de un
+  estructural (2+ dimensiones) en una acción en su horizonte más temprano que «sube A + B»;
+  lo descartado/backlog/no justificado nunca se fusiona. `top_five` pone primero las
+  fusionadas. JSON con lista de dimensiones por acción.
+- **Careo (Codex, 2 rondas):** la fusión perdía los costes de las entradas relacionadas →
+  coste combinado por dimensión (nunca sumado ni inventado; N/D si ninguno).
