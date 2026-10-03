@@ -53,3 +53,19 @@ revisión adversarial (careo) → sello conclave → commit.
   analítica») no se agrupaban → singletons idénticos cuentan como relacionados (pero 1 término
   compartido con palabras extra no) · orden dependiente de qué agente terminó antes → orden
   canónico total (impacto, dimensión, id, texto) antes de agrupar y dentro de cada grupo.
+
+## Loop 4 — Roadmap H1/H2/H3 + TOP-5 (Fase 3)
+- **Audit:** la matriz existe pero no se traduce en acciones ni en el TOP-5 que el operador
+  autoriza — el entregable principal de la skill.
+- **Hecho:** `roadmap.py`: H1 = quick wins · H2 = apuestas de esfuerzo medio + «si sobra
+  tiempo» · H3 = apuestas de esfuerzo alto SOLO si su dimensión pesa ×2 en el objetivo (si
+  no, «no justificadas») · «descartar» nunca entra · coste N/D y ejecutor «por decidir»
+  (no se inventan) · fuera de carriles WIP todo queda «encolar» · TOP-5: estructurales
+  primero, sin duplicar sus hallazgos.
+- **Careo r1 (Codex NO_APTO, 4 IMPORTANTES, todos aplicados):** TOP-5 solo con hallazgos
+  PROGRAMADOS (un estructural «descartar» ya no se cuela) · «si sobra tiempo» de impacto BAJO
+  → backlog, no H2 · `costs` con fuente por (dimensión, hallazgo), el resto N/D · TOP-5 marca
+  «encolar» fuera de carriles WIP.
+- **Careo r2 (Codex NO_APTO, 1 IMPORTANTE):** las dimensiones de un estructural en el TOP-5
+  salían también de entradas no programadas → ahora solo cuentan las programadas, y con <2
+  dimensiones deja de ser estructural.
