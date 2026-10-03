@@ -20,6 +20,8 @@ class Intake:
     repo_path: str | None = None
     url: str | None = None
     context: str = ""
+    ficha_path: str | None = None
+    wip_context: str = ""
     has_software: bool = True
     has_customer_data: bool = True
     add: frozenset[Dimension] = field(default_factory=frozenset)

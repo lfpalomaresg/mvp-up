@@ -163,3 +163,35 @@ def test_h3_subheading_does_not_cut_section(valid_output):
         "- [H2]", "### Detalle\n- [H2]"
     )
     assert [f.id for f in parse_agent_output(text).findings] == ["H1", "H2", "H3"]
+
+
+from mvpup.dimensions import Dimension as D  # noqa: E402
+from mvpup.parsing import GROUP_SEPARATOR, parse_grouped_output  # noqa: E402
+
+
+def _grouped(a: str, b: str) -> str:
+    return f"{GROUP_SEPARATOR}comercial\n{a}\n{GROUP_SEPARATOR}marketing\n{b}"
+
+
+def test_grouped_output_attributes_scores_per_dimension(valid_output):
+    text = _grouped(valid_output.replace("6/10", "4/10"), valid_output.replace("6/10", "8/10"))
+    r = parse_grouped_output(text, (D.COMERCIAL, D.MARKETING))
+    assert r[D.COMERCIAL].score == 4 and r[D.MARKETING].score == 8
+
+
+@pytest.mark.parametrize(
+    "mutate, msg",
+    [
+        (lambda t: t.replace(f"{GROUP_SEPARATOR}marketing", f"{GROUP_SEPARATOR}comercial"), "duplicado"),
+        (lambda t: t.replace(f"{GROUP_SEPARATOR}marketing", f"{GROUP_SEPARATOR}legal"), "no pedido"),
+        (lambda t: t.replace(f"{GROUP_SEPARATOR}marketing", f"{GROUP_SEPARATOR}astros"), "desconocida"),
+        (lambda t: t.replace("## Riesgos si no se actúa", "## Riesgos", 1), "comercial: falta"),
+    ],
+)
+def test_grouped_output_errors(valid_output, mutate, msg):
+    with pytest.raises(FormatError, match=msg):
+        parse_grouped_output(mutate(_grouped(valid_output, valid_output)), (D.COMERCIAL, D.MARKETING))
+
+
+def test_single_dimension_without_separator(valid_output):
+    assert parse_grouped_output(valid_output, (D.TECNICA,))[D.TECNICA].score == 6

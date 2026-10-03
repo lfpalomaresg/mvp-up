@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
 
-from .dimensions import MAX_FINDINGS
+from .dimensions import MAX_FINDINGS, Dimension
 
 
 class FormatError(ValueError):
@@ -51,6 +51,9 @@ LIGERA_TEMPLATE: Template = (
     ("value", "## Valor potencial (1-2 líneas: a qué objetivo del operador sirve — o si conviene archivarla)"),
     ("resume", "## 3 tareas de reanudación (lo primero al retomar, concretas y ordenadas — o de CIERRE si recomienda archivar)"),
 )
+
+# Línea que separa los bloques de un agente que cubre 2 dimensiones agrupadas.
+GROUP_SEPARATOR = "# Dimensión: "
 
 _SCORE_NUM = r"(\d+(?:[.,]\d+)?)\s*/\s*10"
 _PAREN_TAIL_RE = re.compile(r"\s*\([^()]*\)$")
@@ -228,3 +231,44 @@ def parse_ligera_output(text: str) -> LigeraResult:
         resume_tasks=resume,
         warnings=warnings,
     )
+
+
+def parse_grouped_output(text: str, dims: tuple[Dimension, ...]) -> dict[Dimension, DimensionResult]:
+    """Parsea la salida de un agente que cubre varias dimensiones.
+
+    Cada bloque empieza por `# Dimensión: <id>`; debe haber exactamente uno por
+    dimensión esperada. Con una sola dimensión el separador es opcional.
+    """
+    if len(dims) == 1 and GROUP_SEPARATOR not in text:
+        return {dims[0]: parse_agent_output(text)}
+    blocks: dict[Dimension, list[str]] = {}
+    current: Dimension | None = None
+    problems: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith(GROUP_SEPARATOR):
+            ident = line[len(GROUP_SEPARATOR) :].strip()
+            try:
+                current = Dimension(ident)
+            except ValueError:
+                problems.append(f"dimensión desconocida en separador: {ident!r}")
+                current = None
+                continue
+            if current in blocks:
+                problems.append(f"bloque duplicado para {current.value}")
+            blocks.setdefault(current, [])
+            continue
+        if current is not None:
+            blocks[current].append(raw)
+    expected = set(dims)
+    problems += [f"falta el bloque de {d.value}" for d in dims if d not in blocks]
+    problems += [f"bloque no pedido: {d.value}" for d in blocks if d not in expected]
+    if problems:
+        raise FormatError(problems)
+    results: dict[Dimension, DimensionResult] = {}
+    for dim in dims:
+        try:
+            results[dim] = parse_agent_output("\n".join(blocks[dim]))
+        except FormatError as exc:
+            raise FormatError([f"{dim.value}: {p}" for p in exc.problems]) from exc
+    return results
