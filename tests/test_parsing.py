@@ -73,22 +73,7 @@ def test_evidence_declaring_absence_is_dropped(valid_output, ev):
     assert [f.id for f in parse_agent_output(text).findings] == ["H1", "H3"]
 
 
-LIGERA_OUTPUT = """\
-## Score orientativo: 4/10
-## Qué es y estado real
-Prototipo de ejemplo con README y sin código desplegado.
-## Hallazgos clave
-- [H1] Sin despliegue · Impacto: A · Evidencia: no hay URL en README.md
-- [H2] Ficha desalineada · Impacto: M · Evidencia: N/D
-- [H3] Sin métricas · Impacto: M · Evidencia: no hay analítica en index.html
-- [H4] Sin licencia · Impacto: B · Evidencia: falta LICENSE en la raíz
-## Valor potencial
-Sirve al objetivo de reducir trabajo manual.
-## 3 tareas de reanudación
-1. Desplegar el prototipo
-2. Actualizar la ficha
-3. Definir una métrica
-"""
+from support import LIGERA_OUTPUT  # noqa: E402
 
 
 def test_parses_ligera_output():

@@ -26,3 +26,19 @@ revisión adversarial (careo) → sello conclave → commit.
   header en dimensiones.md es compresión del markdown, no formato canónico.
 - **Test clave:** los bloques no divergen de `skill/references/dimensiones.md`
   (drift test) y la plantilla que se pide es la misma que el validador acepta.
+
+## Loop 2 — Orquestador de la Fase 1
+- **Audit:** con prompts y parser listos, el hueco CRÍTICO es que nada ejecuta la pasada.
+- **Hecho:** `runners.py` (protocolo `AgentRunner` + `FakeRunner` determinista) y
+  `orchestrator.py` (`run_pass`: lotes ≤5 en paralelo, un reintento con prompt reforzado ante
+  formato inválido o excepción, "sin evaluar" al segundo fallo, la pasada nunca se bloquea).
+- **Test clave:** pico de concurrencia medido con barrera = 5 en modo full (10 agentes).
+- **Careo r1 (Codex NO_APTO, 2 IMPORTANTES):** un agente agrupado perdía el bloque válido si
+  el otro fallaba → `parse_grouped_partial` + `_run_task` acumula bloques válidos entre
+  intentos · sin timeout un agente colgado bloqueaba la pasada → timeout por intento
+  (`agent_timeout`, 900 s por defecto) con hilo daemon; el hilo colgado sigue vivo pero la
+  pasada continúa (limitación documentada: puede superar 5 hilos vivos momentáneamente).
+- **Careo r2 (Codex NO_APTO):** los hilos colgados podían acumular >5 llamadas vivas →
+  `BoundedSemaphore(5)` liberado al terminar el hilo real; esperar hueco también tiene timeout.
+  Bloques sobrantes en agentes agrupados: decisión → se registran en el log, NO se reintenta
+  (las dimensiones pedidas ya son válidas; reintentar cuesta sin aportar información).

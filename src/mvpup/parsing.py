@@ -233,17 +233,14 @@ def parse_ligera_output(text: str) -> LigeraResult:
     )
 
 
-def parse_grouped_output(text: str, dims: tuple[Dimension, ...]) -> dict[Dimension, DimensionResult]:
-    """Parsea la salida de un agente que cubre varias dimensiones.
-
-    Cada bloque empieza por `# Dimensión: <id>`; debe haber exactamente uno por
-    dimensión esperada. Con una sola dimensión el separador es opcional.
-    """
-    if len(dims) == 1 and GROUP_SEPARATOR not in text:
-        return {dims[0]: parse_agent_output(text)}
+def _split_grouped(
+    text: str, dims: tuple[Dimension, ...]
+) -> tuple[dict[Dimension, list[str]], set[Dimension], list[str]]:
+    """Trocea por separadores. Devuelve (bloques, duplicados, problemas de estructura)."""
     blocks: dict[Dimension, list[str]] = {}
+    duplicated: set[Dimension] = set()
+    structural: list[str] = []
     current: Dimension | None = None
-    problems: list[str] = []
     for raw in text.splitlines():
         line = raw.strip()
         if line.startswith(GROUP_SEPARATOR):
@@ -251,24 +248,58 @@ def parse_grouped_output(text: str, dims: tuple[Dimension, ...]) -> dict[Dimensi
             try:
                 current = Dimension(ident)
             except ValueError:
-                problems.append(f"dimensión desconocida en separador: {ident!r}")
+                structural.append(f"dimensión desconocida en separador: {ident!r}")
+                current = None
+                continue
+            if current not in dims:
+                structural.append(f"bloque no pedido: {current.value}")
                 current = None
                 continue
             if current in blocks:
-                problems.append(f"bloque duplicado para {current.value}")
+                duplicated.add(current)
             blocks.setdefault(current, [])
             continue
         if current is not None:
             blocks[current].append(raw)
-    expected = set(dims)
-    problems += [f"falta el bloque de {d.value}" for d in dims if d not in blocks]
-    problems += [f"bloque no pedido: {d.value}" for d in blocks if d not in expected]
-    if problems:
-        raise FormatError(problems)
-    results: dict[Dimension, DimensionResult] = {}
-    for dim in dims:
+    return blocks, duplicated, structural
+
+
+def parse_grouped_partial(
+    text: str, dims: tuple[Dimension, ...]
+) -> tuple[dict[Dimension, DimensionResult], dict[Dimension, list[str]], list[str]]:
+    """Parsea la salida de un agente de 1-2 dimensiones rescatando los bloques válidos.
+
+    Cada bloque empieza por `# Dimensión: <id>`; con una sola dimensión el
+    separador es opcional. Devuelve (resultados válidos, problemas por dimensión
+    sin resultado, problemas de estructura). Un bloque duplicado es ambiguo: esa
+    dimensión no se acepta. Los bloques desconocidos o no pedidos se ignoran y
+    se reportan como problemas de estructura.
+    """
+    if len(dims) == 1 and GROUP_SEPARATOR not in text:
         try:
-            results[dim] = parse_agent_output("\n".join(blocks[dim]))
+            return {dims[0]: parse_agent_output(text)}, {}, []
         except FormatError as exc:
-            raise FormatError([f"{dim.value}: {p}" for p in exc.problems]) from exc
+            return {}, {dims[0]: exc.problems}, []
+    blocks, duplicated, structural = _split_grouped(text, dims)
+    results: dict[Dimension, DimensionResult] = {}
+    problems: dict[Dimension, list[str]] = {}
+    for dim in dims:
+        if dim in duplicated:
+            problems[dim] = [f"bloque duplicado para {dim.value}"]
+        elif dim not in blocks:
+            problems[dim] = [f"falta el bloque de {dim.value}"]
+        else:
+            try:
+                results[dim] = parse_agent_output("\n".join(blocks[dim]))
+            except FormatError as exc:
+                problems[dim] = [f"{dim.value}: {p}" for p in exc.problems]
+    return results, problems, structural
+
+
+def parse_grouped_output(text: str, dims: tuple[Dimension, ...]) -> dict[Dimension, DimensionResult]:
+    """Versión estricta: cualquier problema (incluidos bloques sobrantes) es FormatError."""
+    results, problems, structural = parse_grouped_partial(text, dims)
+    all_problems = structural + [p for d in dims for p in problems.get(d, [])]
+    if all_problems:
+        raise FormatError(all_problems)
     return results
