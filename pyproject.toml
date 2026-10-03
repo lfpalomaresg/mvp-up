@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-anthropic = ["anthropic>=0.40"]
+anthropic = ["anthropic>=1.11"]  # output_config.effort verificado en 1.11
 dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]

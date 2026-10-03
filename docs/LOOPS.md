@@ -94,3 +94,20 @@ revisión adversarial (careo) → sello conclave → commit.
 - **Careo r3 (Codex NO_APTO, 1 IMPORTANTE):** `*-informe*.md` aceptaba borradores/backups
   como pasadas → `REPORT_NAME_RE` exige `YYYY-MM-DD-informe[-N]` (compartido con cartera).
   Ronda 4 = solo verificación de este arreglo.
+
+## Loop 6 — Runner real con la API de Claude + configuración
+- **Audit:** todo funciona con `FakeRunner`, pero no hay forma de lanzar agentes reales: la
+  herramienta aún no audita nada de verdad.
+- **Hecho:** `config.py` (`.env` sin dependencias que nunca devuelve valores; política de
+  modelos: Sonnet 5.5 por defecto, Fable/Mythos/Haiku prohibidos, identificador validado) y
+  `anthropic_runner.py` (`messages.create` con `system` de solo análisis, effort `medium`,
+  `refusal`/`max_tokens` → error que el orquestador reintenta; instantánea del repo).
+  No se activa el `fallbacks` server-side: su destino no se controla y podría enrutar a un
+  modelo vetado por el operador.
+- **Careo (Codex, 3 rondas + verificación, 2 CRÍTICOS en r1):** symlinks a `.env`, carpetas
+  `credentials/`, claves dentro de ficheros normales, `</repo_snapshot>` inyectado, SDK
+  <1.11, ficheros sin trackear ignorados → defensa en capas: exclusión por nombre en toda la
+  ruta, nunca symlinks (ni la raíz), redacción de patrones de claves y de asignaciones en
+  cualquier posición (valores entrecomillados completos) sobre TODA la instantánea (árbol y
+  git log incluidos), reglas en `system` y la instantánea en bloque aparte. Documentado como
+  best-effort, no garantía.
