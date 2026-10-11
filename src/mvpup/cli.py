@@ -1,4 +1,4 @@
-"""CLI: `mvpup plan | run | validate | cartera | compare`.
+"""CLI: `mvpup plan | run | validate | cartera | compare | html`.
 
 - plan: muestra la selección, los agentes, avisos y el coste orientativo (sin red).
 - run: ejecuta la pasada y guarda el informe versionado (MD + JSON).
@@ -6,6 +6,7 @@
   (p.ej. desde subagentes de Claude Code).
 - cartera: síntesis transversal de los últimos informes de 2+ productos.
 - compare: deltas por dimensión y acciones cerradas/nuevas entre dos informes guardados.
+- html: informe HTML autocontenido (sin CDN ni JS externo) a partir de un Markdown.
 
 El disparo es siempre manual; el modo full exige `--confirm-full`.
 """
@@ -252,6 +253,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
+    if args.html:
+        print(f"HTML: {write_html(path)}")
     if not result.results and result.ligera is None:
         print("⚠️  No se evaluó ninguna dimensión: revisa el log de la pasada.", file=sys.stderr)
         return 3
@@ -336,6 +339,22 @@ def cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def write_html(markdown_path: Path, target: Path | None = None) -> Path:
+    """Escribe el HTML autocontenido de un Markdown (por defecto, junto a él con extensión .html)."""
+    from .htmlreport import render_html
+
+    html_path = target or markdown_path.with_suffix(".html")
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(render_html(markdown_path.read_text(encoding="utf-8")), encoding="utf-8")
+    return html_path
+
+
+def cmd_html(args: argparse.Namespace) -> int:
+    path = write_html(Path(args.file), Path(args.out) if args.out else None)
+    print(f"HTML: {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mvpup", description="Orquestador MVP-UP")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -357,6 +376,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="segundos por intento de agente (> 0)")
     p_run.add_argument("--anclar", action="store_true",
                        help="añade a --ficha la sección «⚡ MVP-UP … LEER AL RETOMAR» (opt-in)")
+    p_run.add_argument("--html", action="store_true", help="guarda también el informe como HTML autocontenido")
     p_run.set_defaults(func=cmd_run)
 
     p_val = sub.add_parser("validate", help="valida la salida de un agente contra su plantilla")
@@ -375,6 +395,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_cmp.add_argument("current", help="informe nuevo (.md con JSON gemelo, o el .json)")
     p_cmp.add_argument("--save", help="guarda el resumen Markdown en esta ruta en vez de imprimirlo")
     p_cmp.set_defaults(func=cmd_compare)
+
+    p_html = sub.add_parser("html", help="informe HTML autocontenido (sin CDN ni JS) a partir de un .md")
+    p_html.add_argument("file", help="Markdown de un informe, comparación o síntesis de cartera")
+    p_html.add_argument("--out", help="ruta del .html (por defecto, junto al .md)")
+    p_html.set_defaults(func=cmd_html)
     return parser
 
 
