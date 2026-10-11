@@ -18,6 +18,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -424,8 +425,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    command: Callable[[argparse.Namespace], int] = args.func
     try:
-        return args.func(args)
+        return command(args)
     except IntakeError as exc:
         print(f"Intake inválido: {exc}", file=sys.stderr)
         return 2

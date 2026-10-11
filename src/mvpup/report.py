@@ -13,6 +13,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from .compare import compare_with_previous
 from .consolidation import Entry, Quadrant, Structural, build_matrix, structural_findings
@@ -315,10 +316,10 @@ def _render_ligera(report: Report) -> str:
     return "\n".join(lines) + "\n"
 
 
-def to_json(report: Report) -> dict:
+def to_json(report: Report) -> dict[str, Any]:
     pr = report.pass_result
     it = report.intake
-    data = {
+    data: dict[str, Any] = {
         "schema": SCHEMA_VERSION,
         "product": it.product,
         "slug": slugify(it.product),
