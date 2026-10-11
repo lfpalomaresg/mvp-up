@@ -126,3 +126,16 @@ def test_non_text_agent_response_is_a_logged_failure_not_a_crash():
     result = run_pass(intake(), runner)
     assert set(result.unevaluated) == {D.TECNICA, D.PRODUCTO_UX}
     assert any("tecnica" in ln and "no devolvió texto" in ln for ln in result.log)
+
+
+def test_discarded_findings_are_visible_in_log_and_report():
+    from datetime import date
+
+    from mvpup.report import build_report, render_markdown
+
+    tec = VALID_OUTPUT.replace("Evidencia: requirements.txt sin versiones", "Evidencia: N/D")
+    runner = FakeRunner({"tecnica": tec, "producto_ux": VALID_OUTPUT, "comercial+marketing": grouped_valid()})
+    result = run_pass(intake(), runner)
+    assert any("tecnica" in ln and "H2" in ln and "sin evidencia" in ln for ln in result.log)
+    md = render_markdown(build_report(result, today=date(2026, 10, 4)))
+    assert "H2" in md and "sin evidencia" in md

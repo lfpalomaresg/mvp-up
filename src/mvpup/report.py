@@ -216,6 +216,16 @@ def _missing_data_lines(pr: PassResult) -> list[str]:
     return [f"- {item} ({', '.join(dims)})" for item, dims in asked.items()]
 
 
+def _discarded_lines(pr: PassResult) -> list[str]:
+    """Hallazgos que el agente citó sin evidencia: el operador debe saber que se quitaron."""
+    return [
+        f"- {dim.label}: {w} (el agente lo afirmó sin prueba; aportar evidencia o re-evaluar)"
+        for dim in Dimension
+        if dim in pr.results
+        for w in pr.results[dim].warnings
+    ]
+
+
 def _header_lines(report: Report) -> list[str]:
     it = report.intake
     lines = [
@@ -266,7 +276,7 @@ def render_markdown(report: Report) -> str:
     lines.append("## Evolución (solo si hay pasada anterior)")
     lines += report.evolution or ["- Primera pasada: este informe es la línea base."]
     lines += ["", "## Datos pendientes que el operador debe aportar"]
-    missing = _missing_data_lines(pr)
+    missing = _missing_data_lines(pr) + _discarded_lines(pr)
     if pr.unevaluated:
         missing.append(
             "- Re-evaluar: " + ", ".join(d.label for d in pr.unevaluated) + " (sin evaluar en esta pasada)"
@@ -291,6 +301,7 @@ def _render_ligera(report: Report) -> str:
         f"- [{f.id}] {f.text} · Impacto: {f.impact.value} · Evidencia: {f.evidence}"
         for f in lig.findings
     ]
+    lines += [f"- ⚠️ {w} (el agente lo afirmó sin prueba)" for w in lig.warnings]
     lines += ["", h["value"], lig.value or "N/D", "", h["resume"]]
     lines += [f"{n}. {t}" for n, t in enumerate(lig.resume_tasks, 1)]
     return "\n".join(lines) + "\n"

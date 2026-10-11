@@ -145,3 +145,12 @@ def test_real_report_has_no_dry_run_marker():
     md = render_markdown(build_report(express_pass(), today=TODAY))
     assert "DRY-RUN" not in md
     assert report_to_json(build_report(express_pass(), today=TODAY))["dry_run"] is False
+
+
+def test_ligera_report_lists_findings_discarded_for_lack_of_evidence():
+    intake = Intake(product="Semilla Demo", stage=Stage.IDEA, objective=Objective.DEPENDENCIA,
+                    mode=Mode.LIGERA)
+    result = run_pass(intake, FakeRunner({"*": LIGERA_OUTPUT}))  # H2 lleva «Evidencia: N/D»
+    md = render_markdown(build_report(result, today=TODAY))
+    assert "H2 descartado: sin evidencia" in md
+    assert any("ligera: aviso: H2 descartado" in ln for ln in result.log)

@@ -120,17 +120,20 @@ def _call(ctx: _Ctx, prompt: str, key: str, log: list[str], attempt: int) -> str
     return text
 
 
-def _attempt(ctx: _Ctx, prompt: str, key: str, parse: Callable[[str], T], log: list[str]) -> T | None:
+def _attempt(ctx: _Ctx, prompt: str, key: str, parse: Callable[[str], LigeraResult], log: list[str]) -> LigeraResult | None:
     current = prompt
     for attempt in range(1, MAX_ATTEMPTS + 1):
         text = _call(ctx, current, key, log, attempt)
         problems = ["el agente no devolvió respuesta"]
         if text is not None:
             try:
-                return parse(text)
+                parsed = parse(text)
             except FormatError as exc:
                 problems = exc.problems
                 log.append(f"{key}: formato inválido en intento {attempt}: {exc}")
+            else:
+                log.extend(f"{key}: aviso: {w}" for w in parsed.warnings)
+                return parsed
         if attempt < MAX_ATTEMPTS:
             log.append(f"{key}: reintento con prompt reforzado")
             current = reinforce(prompt, problems)
@@ -155,6 +158,8 @@ def _run_task(task: AgentTask, intake: Intake, ctx: _Ctx) -> tuple[AgentTask, di
             for dim in pending:  # lo ya válido de un intento anterior no se pisa
                 if dim in parsed:
                     results[dim] = parsed[dim]
+                    # Lo descartado por falta de evidencia se ve: nunca un informe «limpio» en silencio.
+                    log.extend(f"{task.key}: aviso en {dim.value}: {w}" for w in parsed[dim].warnings)
             problems = [p for d in pending if d in by_dim for p in by_dim[d]]
             if problems:
                 log.append(f"{task.key}: formato inválido en intento {attempt}: {'; '.join(problems)}")
