@@ -33,6 +33,7 @@ T = TypeVar("T")
 
 MAX_ATTEMPTS = 2  # intento + un reintento
 DEFAULT_AGENT_TIMEOUT = 900.0  # segundos por intento
+LIGERA_TASK_KEY = "ligera"  # task_key del agente único del modo ligera
 
 
 @dataclass
@@ -176,7 +177,7 @@ def run_pass(
     if intake.mode is Mode.LIGERA:
         if plan.tasks:
             prompt = build_task_prompt(plan.tasks[0], intake)
-            result.ligera = _attempt(ctx, prompt, "ligera", parse_ligera_output, result.log)
+            result.ligera = _attempt(ctx, prompt, LIGERA_TASK_KEY, parse_ligera_output, result.log)
         return result
 
     unevaluated: list[Dimension] = []
