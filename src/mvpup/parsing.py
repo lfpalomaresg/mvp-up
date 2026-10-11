@@ -72,6 +72,9 @@ _NO_EVIDENCE_RE = re.compile(
     r"^(?:n\s*/?\s*d\b|n/a\b|sin evidencia|ninguna\b|no (?:verificad|comprobad|disponible)|[-—–]+$|$)",
     re.IGNORECASE,
 )
+# Cualquier línea que mencione un `[Hn]` pretende ser un hallazgo: si no se lee, es
+# fallo de formato (reintento), nunca un descarte silencioso.
+_FINDING_LIKE_RE = re.compile(r"\[H\d+\]", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -123,11 +126,16 @@ def _match_header(line: str, header: str) -> re.Match[str] | None:
     return _header_regex(header).match(line)
 
 
+def _lines(text: str) -> list[str]:
+    """Líneas del texto sin el BOM inicial (algunos clientes lo anteponen)."""
+    return text.lstrip("﻿").splitlines()
+
+
 def _sections(text: str, template: Template) -> dict[str, list[str]]:
     """Trocea por headers `##` de la plantilla; un header desconocido corta la sección."""
     sections: dict[str, list[str]] = {}
     current: str | None = None
-    for raw in text.splitlines():
+    for raw in _lines(text):
         line = raw.strip()
         if re.match(r"^##(?!#)", line):
             current = next((k for k, h in template if _match_header(line, h)), None)
@@ -161,17 +169,17 @@ def _parse_score(header_line: str, header: str) -> float:
 def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool) -> list[Finding]:
     findings: list[Finding] = []
     unreadable: list[str] = []
+    discarded = 0
     for line in lines[1:]:
         fm = _FINDING_RE.match(line)
         if not fm or (require_effort and not fm.group("eff")):
-            # Un `[Hn]` que no se puede leer es un fallo de FORMATO (reintento), no un
-            # descarte silencioso que dejaría la dimensión sin hallazgos.
-            if re.match(r"^[-*]\s*\[H\d+\]", line, re.IGNORECASE):
+            if _FINDING_LIKE_RE.search(line):
                 unreadable.append(f"hallazgo ilegible: {line!r}")
             continue
         evidence = (fm.group("ev") or "").strip()
         if _NO_EVIDENCE_RE.match(evidence):
             warnings.append(f"{fm.group('id').upper()} descartado: sin evidencia")
+            discarded += 1
             continue
         findings.append(
             Finding(
@@ -184,6 +192,10 @@ def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool)
         )
     if unreadable:
         raise FormatError(unreadable)
+    if discarded and not findings:
+        # El agente afirmó hallazgos pero no probó ninguno: la dimensión no puede
+        # llegar al informe «limpia». Se reintenta pidiendo evidencia.
+        raise FormatError([f"ningún hallazgo con evidencia ({discarded} descartados sin evidencia)"])
     return findings
 
 
@@ -194,7 +206,7 @@ def _require(sections: dict[str, list[str]], template: Template) -> None:
 
 
 def _count_finding_lines(lines: list[str]) -> int:
-    return sum(1 for ln in lines[1:] if re.match(r"^[-*]\s*\[H\d+\]", ln, re.IGNORECASE))
+    return sum(1 for ln in lines[1:] if _FINDING_LIKE_RE.search(ln))
 
 
 def parse_agent_output(text: str) -> DimensionResult:
@@ -264,7 +276,7 @@ def _split_grouped(
     duplicated: set[Dimension] = set()
     structural: list[str] = []
     current: Dimension | None = None
-    for raw in text.splitlines():
+    for raw in _lines(text):
         line = raw.strip()
         sep = _SEPARATOR_RE.match(line)
         if sep:
@@ -298,7 +310,7 @@ def parse_grouped_partial(
     dimensión no se acepta. Los bloques desconocidos o no pedidos se ignoran y
     se reportan como problemas de estructura.
     """
-    if len(dims) == 1 and not any(_SEPARATOR_RE.match(ln.strip()) for ln in text.splitlines()):
+    if len(dims) == 1 and not any(_SEPARATOR_RE.match(ln.strip()) for ln in _lines(text)):
         try:
             return {dims[0]: parse_agent_output(text)}, {}, []
         except FormatError as exc:
