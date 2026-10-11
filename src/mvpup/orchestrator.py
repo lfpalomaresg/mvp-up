@@ -13,7 +13,7 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import TypeVar
+from typing import Generic, TypeVar, cast
 
 from .dimensions import MAX_PARALLEL_AGENTS, Dimension, Mode
 from .intake import Intake
@@ -33,6 +33,7 @@ T = TypeVar("T")
 
 MAX_ATTEMPTS = 2  # intento + un reintento
 DEFAULT_AGENT_TIMEOUT = 900.0  # segundos por intento
+LIGERA_TASK_KEY = "ligera"  # task_key del agente único del modo ligera
 
 
 @dataclass
@@ -66,6 +67,15 @@ def reinforce(prompt: str, problems: list[str]) -> str:
     )
 
 
+@dataclass
+class _Outcome(Generic[T]):
+    """Resultado de un hilo de agente: valor o excepción (la que sea) para re-lanzar fuera."""
+
+    value: T | None = None
+    error: BaseException | None = None
+    done: bool = False
+
+
 def _call_with_timeout(fn: Callable[[], T], timeout: float | None, slots: threading.Semaphore) -> T:
     """Ejecuta `fn` en un hilo daemon y abandona la espera al vencer `timeout`.
 
@@ -76,13 +86,14 @@ def _call_with_timeout(fn: Callable[[], T], timeout: float | None, slots: thread
     """
     if not slots.acquire(timeout=timeout):
         raise TimeoutError(f"sin hueco libre para el agente en {timeout:g}s (agentes colgados)")
-    box: dict[str, object] = {}
+    outcome: _Outcome[T] = _Outcome()
 
     def target() -> None:
         try:
-            box["value"] = fn()
+            outcome.value = fn()
+            outcome.done = True
         except BaseException as exc:  # noqa: BLE001 — se re-lanza en el hilo principal
-            box["error"] = exc
+            outcome.error = exc
         finally:
             slots.release()
 
@@ -91,9 +102,11 @@ def _call_with_timeout(fn: Callable[[], T], timeout: float | None, slots: thread
     thread.join(timeout)
     if thread.is_alive():
         raise TimeoutError(f"el agente no respondió en {timeout:g}s")
-    if "error" in box:
-        raise box["error"]  # type: ignore[misc]
-    return box["value"]  # type: ignore[return-value]
+    if outcome.error is not None:
+        raise outcome.error
+    if not outcome.done:  # pragma: no cover — el hilo terminó sin valor ni error: imposible salvo bug
+        raise RuntimeError("el agente terminó sin devolver resultado")
+    return cast(T, outcome.value)
 
 
 @dataclass(frozen=True)
@@ -105,26 +118,34 @@ class _Ctx:
 
 def _call(ctx: _Ctx, prompt: str, key: str, log: list[str], attempt: int) -> str | None:
     try:
-        return _call_with_timeout(
+        text = _call_with_timeout(
             lambda: ctx.runner.run(prompt, task_key=key), ctx.timeout, ctx.slots
         )
     except Exception as exc:  # noqa: BLE001 — un agente caído no tumba la pasada
         # El texto de una excepción puede llevar URLs con credenciales o cabeceras: se redacta.
         log.append(redact(f"{key}: el agente falló en intento {attempt}: {type(exc).__name__}: {exc}"))
         return None
+    if not isinstance(text, str):
+        # Un runner mal configurado (p.ej. --fake-responses con un número) no debe tumbar la pasada.
+        log.append(f"{key}: el agente no devolvió texto en intento {attempt} ({type(text).__name__})")
+        return None
+    return text
 
 
-def _attempt(ctx: _Ctx, prompt: str, key: str, parse: Callable[[str], T], log: list[str]) -> T | None:
+def _attempt(ctx: _Ctx, prompt: str, key: str, parse: Callable[[str], LigeraResult], log: list[str]) -> LigeraResult | None:
     current = prompt
     for attempt in range(1, MAX_ATTEMPTS + 1):
         text = _call(ctx, current, key, log, attempt)
         problems = ["el agente no devolvió respuesta"]
         if text is not None:
             try:
-                return parse(text)
+                parsed = parse(text)
             except FormatError as exc:
                 problems = exc.problems
                 log.append(f"{key}: formato inválido en intento {attempt}: {exc}")
+            else:
+                log.extend(f"{key}: aviso: {w}" for w in parsed.warnings)
+                return parsed
         if attempt < MAX_ATTEMPTS:
             log.append(f"{key}: reintento con prompt reforzado")
             current = reinforce(prompt, problems)
@@ -149,6 +170,8 @@ def _run_task(task: AgentTask, intake: Intake, ctx: _Ctx) -> tuple[AgentTask, di
             for dim in pending:  # lo ya válido de un intento anterior no se pisa
                 if dim in parsed:
                     results[dim] = parsed[dim]
+                    # Lo descartado por falta de evidencia se ve: nunca un informe «limpio» en silencio.
+                    log.extend(f"{task.key}: aviso en {dim.value}: {w}" for w in parsed[dim].warnings)
             problems = [p for d in pending if d in by_dim for p in by_dim[d]]
             if problems:
                 log.append(f"{task.key}: formato inválido en intento {attempt}: {'; '.join(problems)}")
@@ -176,7 +199,7 @@ def run_pass(
     if intake.mode is Mode.LIGERA:
         if plan.tasks:
             prompt = build_task_prompt(plan.tasks[0], intake)
-            result.ligera = _attempt(ctx, prompt, "ligera", parse_ligera_output, result.log)
+            result.ligera = _attempt(ctx, prompt, LIGERA_TASK_KEY, parse_ligera_output, result.log)
         return result
 
     unevaluated: list[Dimension] = []

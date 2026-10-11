@@ -17,14 +17,17 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TextIO
 
 from .config import ModelPolicyError, check_model
 from .dimensions import Dimension, Mode, Objective, Stage
 from .intake import Intake, IntakeError
+from .orchestrator import DEFAULT_AGENT_TIMEOUT
 from .parsing import FormatError, parse_grouped_output, parse_ligera_output
 from .prompts import build_task_prompt
 from .redaction import redact
-from .selection import build_plan
+from .runners import AgentRunner
+from .selection import Plan, build_plan
 
 REPORTS_ENV = "MVPUP_REPORTS_DIR"
 DEFAULT_REPORTS_DIR = "informes"
@@ -44,6 +47,8 @@ CRITICAL_MODEL = "claude-opus-5-5"
 
 def cost_hint(mode: Mode, agents: int) -> str:
     """Coste orientativo; si el plan se sale de lo calibrado, se escala por agente."""
+    if agents <= 0:
+        return "sin agentes que lanzar (ninguna dimensión evaluable) · 0 tokens"
     calibrated = {Mode.LIGERA: (1, 1), Mode.EXPRESS: (3, 5), Mode.FULL: (10, 10)}[mode]
     if calibrated[0] <= agents <= calibrated[1]:
         return f"{COST_HINT[mode]} · {agents} agentes"
@@ -66,6 +71,17 @@ def _dims(value: str) -> frozenset[Dimension]:
     except ValueError as exc:
         valid = ", ".join(d.value for d in Dimension)
         raise argparse.ArgumentTypeError(f"dimensión inválida (válidas: {valid})") from exc
+
+
+def _positive_seconds(value: str) -> float:
+    """`--timeout`: segundos > 0 (0, negativo o NaN dejarían fallar a todos los agentes tras lanzar)."""
+    try:
+        seconds = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"--timeout debe ser un número de segundos: {value!r}") from exc
+    if not seconds > 0:  # `not >` también descarta NaN
+        raise argparse.ArgumentTypeError(f"--timeout debe ser mayor que 0: {value!r}")
+    return seconds
 
 
 def _add_intake_args(p: argparse.ArgumentParser) -> None:
@@ -106,27 +122,31 @@ def _intake(args: argparse.Namespace) -> Intake:
     )
 
 
+def _print_plan(intake: Intake, plan: Plan, file: TextIO) -> None:
+    print(f"Producto: {intake.product} · etapa {intake.stage.value} · objetivo {intake.objective.value}", file=file)
+    print(f"Modo: {intake.mode.value} · coste orientativo {cost_hint(intake.mode, len(plan.tasks))}", file=file)
+    for key, model in critical_models(intake).items():
+        print(f"Decisión crítica: el agente {key} usará {model}", file=file)
+    print("Dimensiones: " + ", ".join(d.label for d in plan.selected), file=file)
+    if plan.not_applicable:
+        print("N/A: " + ", ".join(d.label for d in plan.not_applicable), file=file)
+    for n, batch in enumerate(plan.batches, 1):
+        print(f"Lote {n}: " + " · ".join(t.key for t in batch), file=file)
+    for w in plan.warnings:
+        print(f"⚠️  {w}", file=file)
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     intake = _intake(args)
     plan = build_plan(intake)
-    print(f"Producto: {intake.product} · etapa {intake.stage.value} · objetivo {intake.objective.value}")
-    print(f"Modo: {intake.mode.value} · coste orientativo {cost_hint(intake.mode, len(plan.tasks))}")
-    for key, model in critical_models(intake).items():
-        print(f"Decisión crítica: el agente {key} usará {model}")
-    print("Dimensiones: " + ", ".join(d.label for d in plan.selected))
-    if plan.not_applicable:
-        print("N/A: " + ", ".join(d.label for d in plan.not_applicable))
-    for n, batch in enumerate(plan.batches, 1):
-        print(f"Lote {n}: " + " · ".join(t.key for t in batch))
-    for w in plan.warnings:
-        print(f"⚠️  {w}")
+    _print_plan(intake, plan, sys.stdout)
     if args.show_prompts:
         for task in plan.tasks:
             print(f"\n===== PROMPT {task.key} =====\n{build_task_prompt(task, intake)}")
     return 0
 
 
-def _runner(args: argparse.Namespace, intake: Intake):
+def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
     if args.runner == "fake":
         from .runners import FakeRunner
 
@@ -135,7 +155,10 @@ def _runner(args: argparse.Namespace, intake: Intake):
         data = json.loads(Path(args.fake_responses).read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("--fake-responses debe ser un objeto JSON {task_key: salida}")
-        return FakeRunner(data)
+        try:
+            return FakeRunner(data)
+        except TypeError as exc:
+            raise CliError(f"--fake-responses: {exc}") from exc
     from .anthropic_runner import AnthropicRunner, repo_snapshot
     from .config import API_KEY_ENV, load_dotenv
 
@@ -194,24 +217,37 @@ def cmd_run(args: argparse.Namespace) -> int:
     intake = _intake(args)
     if args.model:
         check_model(args.model)  # la política de modelos va antes que cualquier otra cosa
+    # Errores de uso: se detectan ANTES de lanzar (y pagar) la pasada.
     if args.anclar and not intake.ficha_path:
-        # Error de uso: se detecta ANTES de lanzar (y pagar) la pasada.
         raise CliError("--anclar requiere --ficha <ruta de la ficha del producto>")
+    if args.dry_run and (args.runner == "fake" or args.fake_responses):
+        raise CliError("--dry-run ya simula los agentes: no se combina con --runner fake/--fake-responses")
+    if args.dry_run and args.anclar:
+        raise CliError("--anclar no se combina con --dry-run: un informe sintético no se ancla en una ficha real")
     out = Path(args.out or os.environ.get(REPORTS_ENV) or DEFAULT_REPORTS_DIR)
     check_out_dir(out)
-    runner = _runner(args, intake)
     plan = build_plan(intake)
+    if args.dry_run:
+        from .dryrun import dry_run_responses
+        from .runners import FakeRunner
+
+        print("DRY-RUN: pasada simulada con datos sintéticos (sin red, sin API key, sin coste).", file=sys.stderr)
+        runner: AgentRunner = FakeRunner(dry_run_responses(plan, intake.mode))
+    else:
+        runner = _runner(args, intake)
+    _print_plan(intake, plan, sys.stderr)
     print(f"Lanzando pasada {intake.mode.value} ({cost_hint(intake.mode, len(plan.tasks))})…", file=sys.stderr)
     result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
-    report = build_report(result, base_dir=out)
+    report = build_report(result, base_dir=out, dry_run=args.dry_run)
     path = save_report(report, out)
-    if args.anclar:
-        written = anchor_ficha(Path(intake.ficha_path), path, report.global_score, report.date,
+    if args.anclar and intake.ficha_path:  # la ficha ya se exigió arriba; aquí solo se estrecha el tipo
+        ficha = Path(intake.ficha_path)
+        written = anchor_ficha(ficha, path, report.global_score, report.date,
                                product=intake.product, repo=intake.repo_path)
         if written:
-            print(f"Anclaje «LEER AL RETOMAR» añadido a {intake.ficha_path}")
+            print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
         else:
-            print(f"La ficha {intake.ficha_path} ya tenía el anclaje de este informe: sin cambios")
+            print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
@@ -231,15 +267,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
     text = Path(args.file).read_text(encoding="utf-8")
     try:
         if args.ligera:
-            r = parse_ligera_output(text)
-            print(f"OK · ligera · score {r.score:g}/10 · {len(r.findings)} hallazgos")
+            ligera = parse_ligera_output(text)
+            print(f"OK · ligera · score {ligera.score:g}/10 · {len(ligera.findings)} hallazgos")
+            for w in ligera.warnings:
+                print(f"  ⚠️ {w}")
         else:
             dims = tuple(sorted(args.dims, key=list(Dimension).index))
             if not dims:
                 raise SystemExit("indica --dims (o --ligera)")
-            for dim, r in parse_grouped_output(text, dims).items():
-                print(f"OK · {dim.value} · score {r.score:g}/10 · {len(r.findings)} hallazgos")
-                for w in r.warnings:
+            for dim, result in parse_grouped_output(text, dims).items():
+                print(f"OK · {dim.value} · score {result.score:g}/10 · {len(result.findings)} hallazgos")
+                for w in result.warnings:
                     print(f"  ⚠️ {w}")
     except FormatError as exc:
         print("FORMATO INVÁLIDO:", file=sys.stderr)
@@ -283,9 +321,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_intake_args(p_run)
     p_run.add_argument("--runner", choices=["anthropic", "fake"], default="anthropic")
     p_run.add_argument("--fake-responses", help="JSON {task_key: salida} para --runner fake")
+    p_run.add_argument("--dry-run", action="store_true",
+                       help="pasada completa con agentes simulados y datos sintéticos (sin red ni API key)")
     p_run.add_argument("--model", help="modelo de los agentes (por defecto claude-sonnet-5-5)")
     p_run.add_argument("--out", help=f"carpeta de informes (o ${REPORTS_ENV}; por defecto ./{DEFAULT_REPORTS_DIR})")
-    p_run.add_argument("--timeout", type=float, default=900.0, help="segundos por intento de agente")
+    p_run.add_argument("--timeout", type=_positive_seconds, default=DEFAULT_AGENT_TIMEOUT,
+                       help="segundos por intento de agente (> 0)")
     p_run.add_argument("--anclar", action="store_true",
                        help="añade a --ficha la sección «⚡ MVP-UP … LEER AL RETOMAR» (opt-in)")
     p_run.set_defaults(func=cmd_run)
@@ -319,6 +360,10 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:  # ficheros inexistentes/ilegibles, JSON inválido
         print(f"Error: {type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
         return 2
+    except KeyboardInterrupt:
+        # Convención POSIX: 128 + SIGINT. Sin traceback: el operador ya sabe que ha cortado.
+        print("Interrumpido por el usuario: la pasada se ha cancelado y no se ha guardado informe.", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":  # pragma: no cover

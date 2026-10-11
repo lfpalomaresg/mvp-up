@@ -21,4 +21,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # Sin secretos: los tests no tocan la red ni usan API keys (runner falso).
       - run: python -m pip install -e ".[dev]"
+      - run: python -m mypy --check-untyped-defs src
       - run: python -m pytest -q

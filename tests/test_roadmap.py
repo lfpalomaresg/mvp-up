@@ -184,3 +184,13 @@ def test_merged_action_marks_partial_costs():
     assert merged.cost == "Marketing y hype: 5 h; Comercial: N/D"
     rm2 = build_roadmap(matrix, Objective.INGRESOS, structural=structural_findings(results))
     assert next(i for i in rm2.all_items() if i.related).cost == "N/D"
+
+
+# --- loop 2: Horizon.label (no `title`, que pisa str.title) ---
+
+def test_horizon_label_does_not_shadow_str_title():
+    from mvpup.roadmap import Horizon
+
+    assert Horizon.H1.label == "Esta semana (quick wins)"
+    assert Horizon.H3.label == "Trimestre"
+    assert Horizon.H1.title() == "H1"  # el método de str sigue siendo el de str

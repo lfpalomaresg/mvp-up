@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 import pytest
@@ -169,3 +170,50 @@ def test_non_report_markdown_is_not_a_pass(tmp_path, name):
     report = build_report(pass_with(tecnica="5/10"), today=date(2026, 10, 4), base_dir=tmp_path)
     assert report.pass_number == 2
     assert report.deltas[D.TECNICA] == "🔴 -3"
+
+
+# --- loop 1: un JSON anterior con tipos corruptos no puede tumbar el informe tras pagar la pasada ---
+
+def _write_previous(tmp_path, **fields):
+    folder = tmp_path / "producto-demo"
+    folder.mkdir(exist_ok=True)
+    data = {"schema": 1, "date": "2026-09-01", "objective": "ingresos", "stage": "mvp",
+            "global_score": 6.0, "scores": {"tecnica": 4}, "roadmap": [], "findings": []}
+    data.update(fields)
+    (folder / "2026-09-01-informe.md").write_text("# informe", encoding="utf-8")
+    (folder / "2026-09-01-informe.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+@pytest.mark.parametrize("fields", [
+    {"global_score": "alto"}, {"global_score": True}, {"scores": "x"}, {"scores": {"tecnica": "cinco"}},
+    {"roadmap": "nada"}, {"roadmap": [{"action": 5}]}, {"findings": "x"}, {"date": 20260901}, {"stage": 3},
+])
+def test_corrupt_fields_in_previous_json_degrade_to_a_warning(tmp_path, fields):
+    _write_previous(tmp_path, **fields)
+    report = build_report(pass_with(), today=date(2026, 10, 4), base_dir=tmp_path)
+    assert report.pass_number == 2
+    assert report.evolution  # hay sección de evolución, aunque sea un aviso
+    render_markdown(report)  # y se renderiza sin excepción
+
+
+def test_unexpected_error_in_comparison_is_reported_not_raised(tmp_path, monkeypatch):
+    from mvpup import report as report_module
+
+    _write_previous(tmp_path)
+
+    def boom(report, previous):
+        raise RuntimeError("fallo inesperado de comparación")
+
+    monkeypatch.setattr(report_module, "compare_with_previous", boom)
+    report = build_report(pass_with(), today=date(2026, 10, 4), base_dir=tmp_path)
+    assert any("comparación" in ln and "RuntimeError" in ln for ln in report.evolution)
+
+
+def test_corrupt_previous_finding_text_does_not_lose_the_whole_comparison(tmp_path):
+    # `findings[i].text` no textual: se ignora ese hallazgo, no la comparación entera (deltas, caídas).
+    _write_previous(tmp_path, scores={"tecnica": 9},
+                    findings=[{"dimension": "tecnica", "text": 3}, True, {"text": []}, {"dimension": "tecnica"}])
+    report = build_report(pass_with(), today=date(2026, 10, 4), base_dir=tmp_path)
+    assert report.deltas[D.TECNICA] == "🔴 -3"
+    assert any("bajó" in ln for ln in report.evolution)
+    assert not any("falló" in ln for ln in report.evolution)

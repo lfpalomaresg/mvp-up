@@ -1,6 +1,8 @@
 """Salidas de agente e informes de ejemplo. TODOS los datos son ficticios."""
 
 import json
+import re
+from pathlib import Path
 
 VALID_OUTPUT = """\
 ## Score: 6/10 (rúbrica al pie)
@@ -42,3 +44,13 @@ def write_report(base, slug, date, scores, global_score, objective="ingresos"):
     data = {"schema": 1, "product": slug.replace("-", " ").title(), "slug": slug, "date": date,
             "objective": objective, "global_score": global_score, "scores": scores}
     (folder / f"{date}-informe.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+TEMPLATE_PATH = Path(__file__).parent.parent / "skill" / "references" / "plantilla-informe.md"
+
+
+def template_headers() -> list[str]:
+    """Headers `##`/`###` del bloque markdown de la plantilla del informe, en orden."""
+    md = TEMPLATE_PATH.read_text(encoding="utf-8")
+    block = md.split("```markdown", 1)[1].split("```", 1)[0]
+    return [ln.strip() for ln in block.splitlines() if re.match(r"^#{2,3} ", ln.strip())]

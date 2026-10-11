@@ -17,6 +17,7 @@ from pathlib import Path
 from .compare import compare_with_previous
 from .consolidation import Entry, Quadrant, Structural, build_matrix, structural_findings
 from .dimensions import Dimension, Mode
+from .intake import Intake
 from .orchestrator import PassResult
 from .parsing import LIGERA_TEMPLATE
 from .roadmap import Horizon, Roadmap, build_roadmap, top_five
@@ -40,10 +41,17 @@ class Report:
     top: list[str] = field(default_factory=list)
     evolution: list[str] = field(default_factory=list)
     deltas: dict[Dimension, str] = field(default_factory=dict)
+    dry_run: bool = False  # datos sintéticos: nunca es una auditoría ni cuenta como pasada
 
     @property
-    def intake(self):
+    def intake(self) -> Intake:
         return self.pass_result.intake
+
+
+DRY_RUN_NOTICE = (
+    "**⚠️ DRY-RUN:** agentes simulados con datos sintéticos (evidencias marcadas "
+    "`[sintético]`). Este informe NO es una auditoría y no cuenta como pasada."
+)
 
 
 def slugify(name: str) -> str:
@@ -83,14 +91,20 @@ def report_sort_key(path: Path) -> tuple[str, int]:
 
 
 def build_report(
-    pass_result: PassResult, today: date | None = None, base_dir: Path | str | None = None
+    pass_result: PassResult,
+    today: date | None = None,
+    base_dir: Path | str | None = None,
+    dry_run: bool = False,
 ) -> Report:
+    """`dry_run`: datos sintéticos; no se compara con pasadas anteriores ni las cuenta."""
     intake = pass_result.intake
     today = today or date.today()
+    if dry_run:
+        base_dir = None
     number = len(previous_reports(base_dir, intake.product)) + 1
     if intake.mode is Mode.LIGERA:
         score = pass_result.ligera.score if pass_result.ligera else None
-        return Report(pass_result, today, number, score)
+        return Report(pass_result, today, number, score, dry_run=dry_run)
     matrix = build_matrix(pass_result.results, intake.objective)
     structural = structural_findings(pass_result.results)
     roadmap = build_roadmap(
@@ -105,6 +119,7 @@ def build_report(
         structural=structural,
         roadmap=roadmap,
         top=top_five(roadmap),
+        dry_run=dry_run,
     )
     previous = previous_reports(base_dir, intake.product)
     if previous:
@@ -124,7 +139,13 @@ def build_report(
                 f"- ⚠️ Informe anterior ilegible ({last.name}: {exc}); sin comparación."
             ]
         else:
-            compare_with_previous(report, data)
+            try:
+                compare_with_previous(report, data)
+            except Exception as exc:  # noqa: BLE001 — la comparación es accesoria: el informe, no
+                report.evolution = [
+                    f"- ⚠️ La comparación automática con {last.name} falló "
+                    f"({type(exc).__name__}: {exc}); compararla a mano."
+                ]
     return report
 
 
@@ -151,7 +172,9 @@ def _scores_table(report: Report) -> list[str]:
         delta = report.deltas.get(dim, "—")
         if dim in pr.results:
             s = pr.results[dim].score
-            rows.append(f"| {dim.label} | {fmt_score(s)}/10 | {delta} | {status_icon(s)} |")
+            # El semáforo se calcula sobre el score TAL COMO SE MUESTRA (1 decimal): un 6,96
+            # se imprime «7,0» y debe ser 🟢, no 🟡, o la leyenda miente.
+            rows.append(f"| {dim.label} | {fmt_score(s)}/10 | {delta} | {status_icon(round(s, 1))} |")
         elif dim in pr.unevaluated:
             rows.append(f"| {dim.label} | sin evaluar | {delta} | ⚪ |")
         elif dim in pr.not_applicable:
@@ -164,7 +187,7 @@ def _scores_table(report: Report) -> list[str]:
 def _roadmap_lines(roadmap: Roadmap) -> list[str]:
     out: list[str] = []
     for h in Horizon:
-        out.append(f"### {h.value} — {h.title}")
+        out.append(f"### {h.value} — {h.label}")
         items = roadmap.items(h)
         if not items:
             out.append("- (sin acciones)")
@@ -201,14 +224,27 @@ def _missing_data_lines(pr: PassResult) -> list[str]:
     return [f"- {item} ({', '.join(dims)})" for item, dims in asked.items()]
 
 
+def _discarded_lines(pr: PassResult) -> list[str]:
+    """Hallazgos que el agente citó sin evidencia: el operador debe saber que se quitaron."""
+    return [
+        f"- {dim.label}: {w} (el agente lo afirmó sin prueba; aportar evidencia o re-evaluar)"
+        for dim in Dimension
+        if dim in pr.results
+        for w in pr.results[dim].warnings
+    ]
+
+
 def _header_lines(report: Report) -> list[str]:
     it = report.intake
-    return [
+    lines = [
         f"# MVP-UP · {it.product} · {report.date.isoformat()}",
         "",
         f"**Modo:** {it.mode.value} · **Etapa:** {it.stage.value} · "
         f"**Objetivo de valor:** {it.objective.value}",
     ]
+    if report.dry_run:
+        lines.insert(2, DRY_RUN_NOTICE)
+    return lines
 
 
 def render_markdown(report: Report) -> str:
@@ -248,7 +284,7 @@ def render_markdown(report: Report) -> str:
     lines.append("## Evolución (solo si hay pasada anterior)")
     lines += report.evolution or ["- Primera pasada: este informe es la línea base."]
     lines += ["", "## Datos pendientes que el operador debe aportar"]
-    missing = _missing_data_lines(pr)
+    missing = _missing_data_lines(pr) + _discarded_lines(pr)
     if pr.unevaluated:
         missing.append(
             "- Re-evaluar: " + ", ".join(d.label for d in pr.unevaluated) + " (sin evaluar en esta pasada)"
@@ -273,6 +309,7 @@ def _render_ligera(report: Report) -> str:
         f"- [{f.id}] {f.text} · Impacto: {f.impact.value} · Evidencia: {f.evidence}"
         for f in lig.findings
     ]
+    lines += [f"- ⚠️ {w} (el agente lo afirmó sin prueba)" for w in lig.warnings]
     lines += ["", h["value"], lig.value or "N/D", "", h["resume"]]
     lines += [f"{n}. {t}" for n, t in enumerate(lig.resume_tasks, 1)]
     return "\n".join(lines) + "\n"
@@ -290,6 +327,7 @@ def to_json(report: Report) -> dict:
         "stage": it.stage.value,
         "objective": it.objective.value,
         "pass_number": report.pass_number,
+        "dry_run": report.dry_run,
         "global_score": report.global_score,
         "scores": {d.value: s for d, s in pr.scores().items()},
         "not_applicable": [d.value for d in pr.not_applicable],
@@ -323,10 +361,14 @@ def to_json(report: Report) -> dict:
 
 
 def save_report(report: Report, base_dir: Path | str) -> Path:
-    """Escribe `<base>/<slug>/YYYY-MM-DD-informe[-N].md` + `.json`. Nunca sobrescribe."""
+    """Escribe `<base>/<slug>/YYYY-MM-DD-informe[-N].md` + `.json`. Nunca sobrescribe.
+
+    Un dry-run se guarda como `YYYY-MM-DD-dry-run[-N]`: ese nombre no cumple
+    `REPORT_NAME_RE`, así que ni la siguiente pasada ni la cartera lo ven.
+    """
     folder = report_dir(base_dir, report.intake.product)
     folder.mkdir(parents=True, exist_ok=True)
-    stem = f"{report.date.isoformat()}-informe"
+    stem = f"{report.date.isoformat()}-{'dry-run' if report.dry_run else 'informe'}"
     n = 1
     path = folder / f"{stem}.md"
     while path.exists() or path.with_suffix(".json").exists():

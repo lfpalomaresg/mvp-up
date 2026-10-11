@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import calendar
 import unicodedata
+from collections.abc import Mapping, Sequence
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
 
 from .dimensions import Dimension
+from .parsing import Finding
 from .scoring import global_score
 
 if TYPE_CHECKING:
@@ -57,17 +59,42 @@ def _norm(text: str) -> str:
     return " ".join("".join(c for c in plain if not unicodedata.combining(c)).split())
 
 
-def _prev_scores(previous: dict[str, Any]) -> dict[Dimension, float | None]:
+def _is_number(value: Any) -> TypeGuard[float]:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _prev_scores(previous: dict[str, Any], ignored: list[str]) -> dict[Dimension, float | None]:
+    """Scores anteriores legibles; lo que no sea número (o null) se ignora y se anota."""
+    raw = previous.get("scores")
+    if not isinstance(raw, dict):
+        ignored.append("scores")
+        return {}
     scores: dict[Dimension, float | None] = {}
-    for key, value in (previous.get("scores") or {}).items():
+    for key, value in raw.items():
         try:
-            scores[Dimension(key)] = None if value is None else float(value)
-        except (ValueError, TypeError):
+            dim = Dimension(key)
+        except ValueError:
             continue
+        if value is None or _is_number(value):
+            scores[dim] = None if value is None else float(value)
+        else:
+            ignored.append(f"scores.{key}")
     return scores
 
 
-def _drop_cause(dim: Dimension, findings: list, prev_findings: Any) -> str:
+def _both_scored(
+    current: Mapping[Dimension, float | None], previous: Mapping[Dimension, float | None]
+) -> list[tuple[Dimension, float, float]]:
+    """(dimensión, anterior, actual) solo donde las dos pasadas tienen score."""
+    out: list[tuple[Dimension, float, float]] = []
+    for dim, score in current.items():
+        prev = previous.get(dim)
+        if score is not None and prev is not None:
+            out.append((dim, prev, score))
+    return out
+
+
+def _drop_cause(dim: Dimension, findings: Sequence[Finding], prev_findings: Any) -> str:
     """Causa probable = hallazgos de impacto ALTO nuevos en esa dimensión, con evidencia.
 
     No se inventa causalidad: sin hallazgos de la pasada anterior no se atribuye nada.
@@ -75,9 +102,9 @@ def _drop_cause(dim: Dimension, findings: list, prev_findings: Any) -> str:
     if not isinstance(prev_findings, list):
         return "Sin datos de hallazgos de la pasada anterior para atribuir causa (revisar a mano)."
     before = {
-        _norm(f.get("text", ""))
+        _norm(f["text"])
         for f in prev_findings
-        if isinstance(f, dict) and f.get("dimension") == dim.value
+        if isinstance(f, dict) and f.get("dimension") == dim.value and isinstance(f.get("text"), str)
     }
     new_high = [f for f in findings if f.impact.value == "A" and _norm(f.text) not in before]
     if not new_high:
@@ -90,7 +117,8 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
     """Rellena `report.deltas` y `report.evolution` a partir del JSON anterior."""
     pr = report.pass_result
     intake = report.intake
-    prev_scores = _prev_scores(previous)
+    ignored: list[str] = []  # campos del JSON anterior con un tipo inesperado (se avisa, no se revienta)
+    prev_scores = _prev_scores(previous, ignored)
     current = pr.scores()
     evolution: list[str] = []
 
@@ -99,9 +127,14 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
         prev_date = date.fromisoformat(prev_date_raw)
     except (TypeError, ValueError):
         prev_date = None
-    header = f"- Pasada anterior: {prev_date_raw or 'fecha desconocida'}"
-    if previous.get("global_score") is not None:
-        header += f" · score global {_fmt(previous['global_score'])}/10"
+        if prev_date_raw:
+            ignored.append("date")
+    header = f"- Pasada anterior: {prev_date_raw if prev_date else 'fecha desconocida'}"
+    prev_global = previous.get("global_score")
+    if _is_number(prev_global):
+        header += f" · score global {_fmt(prev_global)}/10"
+    elif prev_global is not None:
+        ignored.append("global_score")
     evolution.append(header)
 
     if prev_date and older_than_six_months(prev_date, report.date):
@@ -133,32 +166,30 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
         else:
             report.deltas[dim] = format_delta(prev, score)
 
-    prev_findings = previous.get("findings")
-    dropped = [d for d, s in current.items() if s is not None and prev_scores.get(d) is not None and s < prev_scores[d]]
+    both = _both_scored(current, prev_scores)
     if objective_changed:
-        moved = [
-            f"{d.label} {_fmt(prev_scores[d])} → {_fmt(s)}"
-            for d, s in current.items()
-            if s is not None and prev_scores.get(d) is not None and s != prev_scores[d]
-        ]
+        moved = [f"{d.label} {_fmt(p)} → {_fmt(s)}" for d, p, s in both if s != p]
         if moved:
             evolution.append(
                 "- Variaciones por dimensión (sin valorar, objetivo cambiado): " + "; ".join(moved) + "."
             )
-        dropped = []
-    for dim in dropped:
-        evolution.append(
-            f"- 🔴 {dim.label} bajó {_fmt(prev_scores[dim])} → {_fmt(current[dim])}. "
-            f"{_drop_cause(dim, pr.results[dim].findings, prev_findings)}"
-        )
-    risen = [] if objective_changed else [
-        d.label for d, s in current.items()
-        if s is not None and prev_scores.get(d) is not None and s > prev_scores[d]
-    ]
-    if risen:
-        evolution.append(f"- Subieron: {', '.join(risen)}.")
+    else:
+        prev_findings = previous.get("findings")
+        for dim, prev, score in both:
+            if score < prev:
+                evolution.append(
+                    f"- 🔴 {dim.label} bajó {_fmt(prev)} → {_fmt(score)}. "
+                    f"{_drop_cause(dim, pr.results[dim].findings, prev_findings)}"
+                )
+        risen = [d.label for d, p, s in both if s > p]
+        if risen:
+            evolution.append(f"- Subieron: {', '.join(risen)}.")
 
-    actions = [a for a in previous.get("roadmap") or [] if isinstance(a, dict) and a.get("action")]
+    raw_roadmap = previous.get("roadmap")
+    if raw_roadmap is not None and not isinstance(raw_roadmap, list):
+        ignored.append("roadmap")
+        raw_roadmap = []
+    actions = [a for a in raw_roadmap or [] if isinstance(a, dict) and isinstance(a.get("action"), str) and a["action"]]
     if actions:
         open_texts = {_norm(f.text) for r in pr.results.values() for f in r.findings}
         gone = [a for a in actions if _norm(a["action"]) not in open_texts]
@@ -169,6 +200,11 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
         evolution.extend(f"  - ✅? {a['action']}" for a in gone)
         evolution.extend(
             f"  - ⏳ sigue abierta: {a['action']}" for a in actions if a not in gone
+        )
+    if ignored:
+        evolution.append(
+            "- ⚠️ Campos ilegibles en el JSON del informe anterior (ignorados en la comparación): "
+            + ", ".join(ignored) + "."
         )
     report.evolution = evolution
 

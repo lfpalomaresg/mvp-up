@@ -121,7 +121,8 @@ dependencias) del orquestador, para que el método sea reproducible y testeable:
 | `prompts.py` | 1 | Prompts por dimensión (copia literal de `dimensiones.md`), agrupados y ligera |
 | `parsing.py` | 1 | Validador de headers EXACTOS + parser (completo, agrupado con rescate parcial, ligera) |
 | `orchestrator.py` | 1 | Lotes ≤5, reintento con prompt reforzado, «sin evaluar», timeout por intento |
-| `runners.py` · `anthropic_runner.py` | 1 | `FakeRunner` (tests) y runner real con la API de Claude + instantánea del repo sin secretos |
+| `runners.py` · `anthropic_runner.py` | 1 | `FakeRunner` (tests y dry-run) y runner real con la API de Claude + instantánea del repo sin secretos |
+| `dryrun.py` | 1 | Salidas sintéticas por dimensión para `run --dry-run`: toda la tubería sin red ni API key |
 | `scoring.py` · `consolidation.py` | 2 | Score ponderado, matriz impacto×esfuerzo, hallazgos estructurales |
 | `roadmap.py` | 3 | H1/H2/H3, backlog, apuestas no justificadas, regla WIP, TOP-5 |
 | `compare.py` | 4 | Δ por dimensión, caídas en rojo, cambio de objetivo (recalcula), aviso >6 meses |
@@ -134,10 +135,14 @@ dependencias) del orquestador, para que el método sea reproducible y testeable:
 
 ```bash
 uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev,anthropic]"
-.venv/bin/pytest -q
+.venv/bin/pytest -q                                   # incluye la puerta de tipos (mypy)
+.venv/bin/mypy --check-untyped-defs src               # o a mano
 
 # Planificar (sin red, sin coste): selección, lotes, avisos y coste orientativo
 mvpup plan --product "Mi producto" --stage mvp --objective ingresos --show-prompts
+
+# Ensayo general (sin red, sin API key, sin coste): la pasada completa con datos sintéticos
+mvpup run --product "Mi producto" --stage mvp --objective ingresos --dry-run
 
 # Ejecutar con agentes reales (Sonnet por defecto; Fable/Mythos/Haiku bloqueados).
 # En full con objetivo vendible/inversión, económica y comercial van con Opus (SKILL.md).
@@ -155,11 +160,77 @@ mvpup cartera --save
 ```
 
 Códigos de salida: `0` OK · `2` error de uso (intake, modelo vetado, falta la API key,
-ficheros, carpeta de informes no gitignoreada) · `3` pasada sin ninguna dimensión evaluada.
+ficheros, `--timeout` no positivo, carpeta de informes no gitignoreada) · `3` pasada sin
+ninguna dimensión evaluada · `130` interrumpida con Ctrl-C (no se guarda informe).
 
 Los informes se guardan en `./informes/<producto>/YYYY-MM-DD-informe.md` (+ `.json`), o en
 `--out` / `$MVPUP_REPORTS_DIR`. Si esa carpeta está dentro de un repo git, `run` exige que
 esté en `.gitignore` (los informes pueden contener datos reales).
+
+### Dry-run: ver la tubería entera sin gastar nada
+
+`mvpup run --dry-run` recorre exactamente el mismo camino que una pasada real (selección por
+etapa, agrupación en agentes, lotes de ≤5, parser, consolidación, matriz, roadmap, informe
+versionado) pero sustituye a los agentes por un `FakeRunner` con salidas sintéticas. No abre
+red, no lee `ANTHROPIC_API_KEY` y no cuesta tokens. Sirve para:
+
+- comprobar una instalación nueva o un cambio de código de extremo a extremo;
+- enseñar cómo es un informe antes de pagar una pasada;
+- ensayar `--stage`, `--mode`, `--add/--remove`, `--no-software`… y ver qué dimensiones y lotes salen.
+
+Lo que verás por `stderr`: el aviso `DRY-RUN`, el plan (dimensiones, N/A, `Lote 1: …`) y el log
+de la pasada. Por `stdout`: la ruta del informe, el score global y el TOP-5. El informe:
+
+- lleva una línea `**⚠️ DRY-RUN:** …` bajo el título y toda evidencia va marcada `[sintético]`;
+- se guarda como `YYYY-MM-DD-dry-run.md` (+ `.json` con `"dry_run": true`): ese nombre **no**
+  cuenta como pasada, así que no altera la numeración ni la comparación de la siguiente pasada
+  real, y la síntesis de cartera lo ignora;
+- los datos sintéticos están pensados para poblar los cuatro cuadrantes de la matriz, producir
+  hallazgos estructurales y un dato pendiente compartido: no describen ningún producto.
+
+`--dry-run` no se combina con `--runner fake` (ya simula los agentes) ni con `--anclar` (un
+informe sintético nunca se ancla en una ficha real). Para simular respuestas concretas de agente
+sigue existiendo `--runner fake --fake-responses <json>`.
+
+### Cómo leer el informe
+
+El Markdown conserva los headers exactos de `skill/references/plantilla-informe.md`, en este orden:
+
+1. **Cabecera** — producto, fecha, modo, etapa, objetivo de valor y **score global** (media
+   ponderada: las dimensiones con peso ×2 para ese objetivo cuentan doble; N/A y «sin evaluar»
+   no cuentan) con el nº de pasada.
+2. **Scores por dimensión** — una fila por dimensión seleccionada: score sobre 10, Δ frente a la
+   pasada anterior (`+1`, `=`, `🔴 -2`, `nuevo`, o `n/c (8→6)` si cambió el objetivo de valor) y
+   semáforo 🟢 7-10 · 🟡 5-6 · 🔴 0-4 sobre el score tal como se muestra. `N/A` = no aplica
+   al producto; `sin evaluar` = el agente falló dos veces (ver «Datos pendientes»).
+3. **Hallazgos estructurales** — el mismo problema citado por 2+ dimensiones (máximo 3). Son
+   candidatos detectados por solapamiento léxico, no un juicio: revísalos primero porque una
+   acción sube varias dimensiones a la vez.
+4. **Matriz impacto × esfuerzo** — TODOS los hallazgos con evidencia, en su cuadrante: ⚡ quick
+   wins (impacto alto, esfuerzo bajo), 🎯 apuestas (alto / medio-alto), 📋 si sobra tiempo
+   (medio-bajo / bajo) y 🗑️ descartar. Dentro de cada celda, primero los de mayor impacto y de
+   dimensiones prioritarias para tu objetivo.
+5. **Roadmap de escalado** — H1 (esta semana) = quick wins · H2 (este mes) = apuestas de
+   esfuerzo medio y «si sobra tiempo» de impacto medio · H3 (trimestre) = apuestas de esfuerzo
+   alto **solo** si su dimensión pesa ×2 para el objetivo; el resto queda listado como «no
+   justificadas». Coste `~N/D` y «ejecutable por: por decidir» no se inventan. Una acción
+   estructural se fusiona en una sola línea que «sube A + B». Fuera de carriles WIP todo va
+   marcado «encolar».
+6. **Evolución** — solo con pasada anterior: score anterior, caídas en 🔴 con causa probable
+   (hallazgos de impacto alto nuevos, con evidencia), acciones del roadmap anterior que ya no
+   aparecen («✅? candidatas a hechas», a confirmar) y avisos (>6 meses, cambio de etapa u
+   objetivo, campos ilegibles del JSON anterior).
+7. **Datos pendientes que el operador debe aportar** — lo que los agentes pidieron (deduplicado
+   entre dimensiones), los hallazgos que un agente citó **sin evidencia** y por eso se quitaron,
+   y las dimensiones a re-evaluar.
+8. **TOP-5 propuesto para autorización** — estructurales primero, luego H1→H3. Nada se ejecuta
+   hasta que lo autorices.
+
+El `.json` gemelo guarda lo mismo de forma estructurada (`scores`, `findings`, `roadmap`,
+`top`, `log`); es lo que lee la pasada siguiente para calcular los Δ y lo que usa `cartera`.
+Si un agente devolvió un formato que el parser no acepta, el log de la pasada dice qué faltó o
+qué línea estaba mal (por ejemplo, un `## Score: ?/10` o un `[H2]` ilegible) y la dimensión se
+reintentó una vez con el prompt reforzado antes de quedar «sin evaluar».
 
 Secretos: la API key solo en `.env` (gitignoreado) o en el entorno. Los agentes reales no
 tienen herramientas: reciben una instantánea de solo lectura del repo que **no sigue
@@ -200,7 +271,8 @@ propios checklists — esas skills solo enriquecen el resultado.
 - ✅ v1.1 (2026-07) — calibrada con 11 proyectos reales (1 piloto express + 3 express + 7 ligeras, 18 agentes)
 - 🔬 Autoevaluada con su propio modo ligera: 6/10 (sí, se audita a sí misma)
 - 📝 Roadmap v1.2: validador de formato de outputs · tabla completa de ponderaciones por objetivo de valor · límites operativos y coste por modo documentados
-- 🐍 Implementación Python 0.2.0 (2026-10): núcleo completo + CLI, 230+ tests, construida en 10 loops de automejora con revisión adversarial (Codex/Gemini) — bitácora en [`docs/LOOPS.md`](docs/LOOPS.md)
+- 🐍 Implementación Python 0.2.0 (2026-10): núcleo completo + CLI, 300+ tests, construida en 10 loops de automejora con revisión adversarial (Codex/Gemini) — bitácora en [`docs/LOOPS.md`](docs/LOOPS.md)
+- 🧪 Loop 11 (2026-10-11): `run --dry-run` de extremo a extremo, parser con fallo cerrado y mensajes explícitos, puerta de tipos con mypy — notas en [`docs/10_SESSION_NOTES.md`](docs/10_SESSION_NOTES.md)
 
 ## Autor y créditos
 
