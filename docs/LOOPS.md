@@ -179,3 +179,18 @@ revisión adversarial (careo) → sello conclave → commit.
   avisos visibles en log e informe, y 8 loops (compare, roadmap, cli ×3, report, runners,
   typing) con test en rojo previo cada uno. 241 → 311 tests; mypy 0 errores; mypy en CI.
 - **Detalle y decisiones:** [`10_SESSION_NOTES.md`](10_SESSION_NOTES.md).
+
+## Loop 12 — Ronda 2: comparar pasadas, HTML autocontenido, ficha con frontmatter (2026-10-11)
+- **Audit:** la comparación solo existía dentro de `run` (última pasada); no había salida HTML; el
+  anclaje en la ficha era un bloque opt-in al final sin metadatos legibles por máquina; y tres
+  errores de uso de la CLI salían mal (fichero de respuestas ignorado con agentes reales, código 1
+  en vez de 2, ficha anclada a pasadas vacías).
+- **Hecho:** `mvpup compare <anterior> <nuevo>` (`compare.py`: `diff_reports`/`render_diff`,
+  helpers compartidos con `compare_with_previous`) · `mvpup html` + `run --html` (`htmlreport.py`,
+  sin dependencias, matriz como tabla accesible, XHTML validado) · `--ficha` con frontmatter
+  (`ficha.py`, edición línea a línea que conserva el resto byte a byte) · 6 loops con test en rojo
+  previo: `--fake-responses` sin `--runner fake` → error de uso; `SystemExit(msg)` → `CliError`
+  (código 2); pasada vacía no ancla la ficha; mypy con `disallow_any_generics`, `warn_return_any`,
+  `disallow_untyped_defs`, `disallow_incomplete_defs`; `fmt_score` único en `scoring.py`;
+  `anchor_ficha` a `ficha.py` conservando CRLF. 321 → 357 tests; mypy 0 errores.
+- **Detalle y decisiones:** [`10_SESSION_NOTES.md`](10_SESSION_NOTES.md).

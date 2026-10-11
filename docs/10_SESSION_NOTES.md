@@ -3,6 +3,91 @@
 Formato por sesión: **Hecho · Pendiente · Decidido**. Todos los datos de tests y ejemplos son
 sintéticos. Las notas de los loops 0-10 están en [`LOOPS.md`](LOOPS.md).
 
+## 2026-10-11 (ronda 2) — Comparar pasadas, HTML autocontenido, ficha con frontmatter, 6 loops
+
+**Rama:** `claude/mvp-up-compare-reports-2ff53c` (desde `main` en `4903127`, el squash del PR #1).
+**Suite antes:** 321 tests en verde · mypy `--check-untyped-defs`: 0 errores en 20 ficheros.
+**Suite después:** 357 tests en verde · mypy: 0 errores en 22 ficheros con la configuración más
+estricta de `pyproject` (`disallow_any_generics`, `warn_return_any`, `disallow_untyped_defs`,
+`disallow_incomplete_defs`). Solo ejecutado con Python 3.13 (el único disponible aquí).
+
+### Hecho
+
+1. **`mvpup compare <anterior> <nuevo>`** (`compare.py`, `cli.py`): `diff_reports()` compara los
+   JSON gemelos de dos informes guardados (se acepta la ruta del `.md` o del `.json`) y
+   `render_diff()` escribe el resumen Markdown: tabla Δ por dimensión con el mismo formato que el
+   informe, acciones **cerradas** (del roadmap anterior y ya ni acción ni hallazgo: candidatas a
+   hechas, «✅?»), **nuevas** («🆕») y que **siguen abiertas** («⏳»), y avisos: productos distintos,
+   argumentos en orden invertido, DRY-RUN, >6 meses, cambio de etapa, cambio de objetivo (Δ «n/c» y
+   score anterior recalculado con los pesos nuevos), campos ilegibles. `--save <ruta>` guarda en vez
+   de imprimir. `compare_with_previous` (la Evolución de `run`) comparte ahora con `diff_reports`
+   los lectores tolerantes del JSON y los avisos de contexto (sin duplicar lógica). Tests: función
+   pura con dicts sintéticos + CLI con dos informes generados por `run --dry-run` (uno con
+   `--add seguridad --remove marketing` y un score retocado para que haya Δ real).
+2. **Informe HTML autocontenido** (`htmlreport.py`, `cli.py`): conversor Markdown→XHTML sin
+   dependencias para el subconjunto que generan `report`, `compare` y `portfolio` (headers,
+   párrafos, negrita, código, enlaces, listas anidadas, casillas `- [ ]`, numeradas, citas, tablas).
+   CSS en línea; ningún `script`, `link`, `img`, `iframe`, fuente ni `url()`. La matriz impacto ×
+   esfuerzo es una tabla accesible (`caption`, `th scope="col"/"row"`, cada cuadrante como etiqueta
+   + `<ul>` en vez de `<br>`). `mvpup html <md> [--out]` y `run --html`. Tests: el HTML se parsea
+   con `xml.etree` (bien formado) y se inventarían todas las etiquetas y atributos `src/href`.
+3. **`--ficha <ruta.md>` con frontmatter** (`ficha.py`, `cli.py`): `anchor_frontmatter()` escribe
+   `mvpup_date`, `mvpup_score` y `mvpup_report` en el frontmatter YAML editando línea a línea (sin
+   parser YAML): el resto del frontmatter y el cuerpo quedan byte a byte (CRLF, BOM, comentarios,
+   orden), las claves se sustituyen en su sitio o se añaden al final, duplicados se eliminan, una
+   fence inicial sin cerrar se trata como cuerpo, ficha inexistente → mínima. Idempotente por
+   informe (segunda llamada → `False`, bytes idénticos). `--anclar` sigue siendo opt-in para el
+   bloque visible. Tests de idempotencia, contenido ajeno intacto, CRLF/BOM, ruta con comillas y
+   barras, y CLI (incluido que `--dry-run` nunca toca la ficha).
+4. **6 loops de automejora** (cada uno con test en rojo previo y commit propio, `tests/test_loops_round2.py`):
+   1. `cli.py`: `--fake-responses` sin `--runner fake` se ignoraba y la pasada salía con agentes
+      REALES → error de uso (código 2) antes de construir ningún runner.
+   2. `cli.py`: `validate` sin `--dims` y `--runner fake` sin `--fake-responses` salían con
+      `SystemExit(msg)` (código 1, sin «Error:») → `CliError` (código 2); `CliError` declarada
+      antes de su primer uso.
+   3. `cli.py`: una pasada con cero dimensiones evaluadas (código 3) anclaba igualmente la ficha
+      (frontmatter + bloque con «—/10») → la comprobación va antes de tocar la ficha y lo dice;
+      anclajes extraídos a `_anchor()`.
+   4. Tipos: `pyproject` activa `disallow_any_generics`, `warn_return_any`, `disallow_untyped_defs`
+      y `disallow_incomplete_defs` (la puerta `tests/test_typing.py` y CI lo heredan) → 3 errores
+      corregidos (`_canonical` tipado, `to_json -> dict[str, Any]`, `main()` sin devolver `Any`).
+   5. Legibilidad: tres formateadores de score distintos (`report.fmt_score`, `compare._fmt`,
+      `portfolio._fmt`) con salidas inconsistentes (la Evolución decía «6/10» y la cabecera
+      «6,0/10») → un único `scoring.fmt_score`.
+   6. Legibilidad: `anchor_ficha` vivía en `report.py` y escribía siempre `\n` → movido a
+      `ficha.py` junto al frontmatter, conserva el salto de línea de la ficha (CRLF/LF).
+5. **Docs**: README (tabla de módulos, uso, sección «Comparar pasadas, HTML y ficha», estado),
+   `LOOPS.md` (Loop 12), esta nota.
+
+### Pendiente (operador)
+
+- Ejecutar `mvpup compare` sobre dos pasadas REALES del mismo producto para calibrar si la
+  heurística «cerrada = ya no aparece ni como acción ni como hallazgo» acierta lo suficiente
+  (aquí solo se ha probado con datos sintéticos).
+- Abrir un HTML generado en los navegadores que uses (y en impresión): el CSS es deliberadamente
+  mínimo; no se ha probado en navegador real en esta sesión.
+- CI: verificar que la configuración más estricta de mypy pasa en 3.11 y 3.12 (aquí solo 3.13).
+- `.claude/settings.json` sigue invocando `graphify hook-guard`, inexistente aquí; no se ha tocado.
+
+### Decidido
+
+- `--ficha` **sin** `--anclar` ahora escribe (solo el frontmatter). Antes `--ficha` únicamente
+  alimentaba el prompt del modo ligera. La tarea pedía «modo `--ficha`: anclar la pasada», y el
+  frontmatter es no destructivo. Si se prefiere que también sea opt-in, es un flag de una línea
+  (ver «Decisiones que dejo al operador» en el PR).
+- Claves del frontmatter planas y en inglés (`mvpup_date`, `mvpup_score`, `mvpup_report`): un
+  bloque anidado `mvpup:` obligaría a un parser YAML o a reescribir el frontmatter; planas se
+  editan línea a línea sin tocar nada ajeno. `mvpup_score` es número YAML (`6.2`) o `null`.
+- «Acción cerrada» en `compare` = del roadmap anterior y ausente del roadmap **y** de los hallazgos
+  del nuevo; si solo salió del roadmap pero sigue siendo hallazgo, está «abierta». Nunca se afirma
+  que se hizo: el operador confirma.
+- `compare` avisa, no rechaza, cuando los informes son de productos distintos, van en orden
+  invertido o son DRY-RUN: el operador eligió esos ficheros a propósito.
+- El HTML se genera desde el Markdown (no desde el `Report`): así sirve también para la
+  comparación, la cartera y cualquier informe antiguo. Sin resaltado de código ni fuentes web por
+  diseño (autocontenido real).
+- No se ha añadido ninguna dependencia (ni YAML ni Markdown): el núcleo sigue a cero.
+
 ## 2026-10-11 — Dry-run, parser con fallo cerrado, 8 loops de automejora
 
 **Rama:** `claude/dry-run-pipeline-ngeroq` (desde `main` en `07880c5`).

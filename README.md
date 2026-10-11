@@ -125,11 +125,13 @@ dependencias) del orquestador, para que el método sea reproducible y testeable:
 | `dryrun.py` | 1 | Salidas sintéticas por dimensión para `run --dry-run`: toda la tubería sin red ni API key |
 | `scoring.py` · `consolidation.py` | 2 | Score ponderado, matriz impacto×esfuerzo, hallazgos estructurales |
 | `roadmap.py` | 3 | H1/H2/H3, backlog, apuestas no justificadas, regla WIP, TOP-5 |
-| `compare.py` | 4 | Δ por dimensión, caídas en rojo, cambio de objetivo (recalcula), aviso >6 meses |
+| `compare.py` | 4 | Δ por dimensión, caídas en rojo, cambio de objetivo (recalcula), aviso >6 meses; `mvpup compare` entre dos informes guardados |
 | `report.py` | 5 | Informe MD con los headers de la plantilla + JSON gemelo versionado |
+| `htmlreport.py` | 5 | Informe HTML autocontenido (sin CDN ni JS) a partir del Markdown; matriz como tabla accesible |
+| `ficha.py` | 5 | Anclaje en la ficha del producto: frontmatter (`--ficha`) y bloque «LEER AL RETOMAR» (`--anclar`) |
 | `portfolio.py` | 2 | Síntesis de cartera (2+ proyectos): patrones transversales, cobertura |
 | `redaction.py` | — | Redacción best-effort de secretos (instantánea y mensajes de error) |
-| `cli.py` | — | `mvpup plan` · `run` · `validate` · `cartera` |
+| `cli.py` | — | `mvpup plan` · `run` · `validate` · `cartera` · `compare` · `html` |
 
 ### Uso
 
@@ -149,8 +151,18 @@ mvpup run --product "Mi producto" --stage mvp --objective ingresos --dry-run
 cp .env.example .env   # y rellena ANTHROPIC_API_KEY — .env está gitignoreado
 mvpup run --product "Mi producto" --stage mvp --objective ingresos --repo ../mi-producto
 
-# Opcional: anclar «⚡ MVP-UP X/10 — LEER AL RETOMAR» al final de la ficha del producto
+# Anclar la pasada en la ficha del producto: --ficha actualiza su frontmatter (fecha, score,
+# ruta del informe) sin tocar el resto; --anclar añade además el bloque «LEER AL RETOMAR»
+mvpup run ... --ficha ruta/a/ficha.md
 mvpup run ... --ficha ruta/a/ficha.md --anclar
+
+# Informe HTML autocontenido (sin CDN, sin JS): junto al .md, o con --html al ejecutar
+mvpup html informes/mi-producto/2026-10-11-informe.md
+mvpup run ... --html
+
+# Comparar dos pasadas ya guardadas: Δ por dimensión, acciones cerradas/nuevas/abiertas
+mvpup compare informes/mi-producto/2026-09-01-informe.md informes/mi-producto/2026-10-11-informe.md
+mvpup compare anterior.json nuevo.json --save comparacion.md
 
 # Validar la salida de un agente lanzado a mano (p.ej. subagente de Claude Code)
 mvpup validate salida.md --dims comercial,marketing
@@ -188,9 +200,36 @@ de la pasada. Por `stdout`: la ruta del informe, el score global y el TOP-5. El 
 - los datos sintéticos están pensados para poblar los cuatro cuadrantes de la matriz, producir
   hallazgos estructurales y un dato pendiente compartido: no describen ningún producto.
 
-`--dry-run` no se combina con `--runner fake` (ya simula los agentes) ni con `--anclar` (un
-informe sintético nunca se ancla en una ficha real). Para simular respuestas concretas de agente
-sigue existiendo `--runner fake --fake-responses <json>`.
+`--dry-run` no se combina con `--runner fake` (ya simula los agentes) ni con `--anclar`; con
+`--ficha` la ficha no se toca (un informe sintético nunca se ancla en una ficha real). Para simular
+respuestas concretas de agente sigue existiendo `--runner fake --fake-responses <json>` (los dos
+flags van juntos: `--fake-responses` sin `--runner fake` es un error de uso, no una pasada real).
+
+### Comparar pasadas, HTML y ficha
+
+- **`mvpup compare <anterior> <nuevo>`** lee los JSON gemelos de dos informes ya guardados (vale
+  la ruta del `.md` o del `.json`) y escribe un resumen Markdown: Δ por dimensión en el mismo
+  formato que la tabla del informe (`+2`, `=`, `🔴 -1`, `nuevo`, `—`), acciones del roadmap anterior
+  que ya no aparecen ni como acción ni como hallazgo (**cerradas**: candidatas a hechas, el operador
+  confirma), acciones **nuevas** y acciones que **siguen abiertas**, y avisos (productos distintos,
+  argumentos en orden invertido, cambio de objetivo → Δ «n/c» y score anterior recalculado, cambio
+  de etapa, pasada anterior de hace >6 meses, informes DRY-RUN, campos ilegibles). `--save` guarda
+  el resumen en vez de imprimirlo. Es un complemento de la sección «Evolución» que `run` ya
+  rellena sola con la última pasada: `compare` sirve para dos pasadas cualesquiera.
+- **`mvpup html <informe.md> [--out ruta.html]`** (o `run --html`) genera un HTML **autocontenido**:
+  CSS en línea, sin script, sin hoja externa, sin imágenes ni fuentes, sin CDN. Convierte el
+  subconjunto de Markdown de los informes (también la comparación y la síntesis de cartera). La
+  matriz impacto × esfuerzo sale como tabla accesible: `<caption>`, cabeceras de columna y de fila
+  con `scope`, y cada cuadrante como etiqueta + lista de hallazgos. Los tests validan que el HTML
+  está bien formado (parser XML) y que no hay ningún recurso externo.
+- **`--ficha <ruta.md>`** ancla la pasada en el **frontmatter** de la ficha del producto con tres
+  claves planas: `mvpup_date`, `mvpup_score` y `mvpup_report` (ruta del informe entre comillas).
+  Se edita línea a línea: el resto del frontmatter (otras claves, comentarios, orden) y el cuerpo
+  se conservan byte a byte, CRLF y BOM incluidos; las claves se sustituyen en su sitio o se añaden
+  al final del bloque; repetir la misma pasada no cambia nada; si la ficha no existe se crea una
+  mínima. `--anclar` añade además el bloque visible «⚡ MVP-UP X/10 — LEER AL RETOMAR» al final
+  (opt-in, idempotente por informe). Una pasada sin ninguna dimensión evaluada (código 3) no
+  toca la ficha.
 
 ### Cómo leer el informe
 
@@ -273,6 +312,7 @@ propios checklists — esas skills solo enriquecen el resultado.
 - 📝 Roadmap v1.2: validador de formato de outputs · tabla completa de ponderaciones por objetivo de valor · límites operativos y coste por modo documentados
 - 🐍 Implementación Python 0.2.0 (2026-10): núcleo completo + CLI, 300+ tests, construida en 10 loops de automejora con revisión adversarial (Codex/Gemini) — bitácora en [`docs/LOOPS.md`](docs/LOOPS.md)
 - 🧪 Loop 11 (2026-10-11): `run --dry-run` de extremo a extremo, parser con fallo cerrado y mensajes explícitos, puerta de tipos con mypy — notas en [`docs/10_SESSION_NOTES.md`](docs/10_SESSION_NOTES.md)
+- 🔁 Loop 12 (2026-10-11, ronda 2): `mvpup compare` entre pasadas, informe HTML autocontenido, `--ficha` con frontmatter y 6 loops de automejora (mypy estricto incluido) — notas en [`docs/10_SESSION_NOTES.md`](docs/10_SESSION_NOTES.md)
 
 ## Autor y créditos
 
