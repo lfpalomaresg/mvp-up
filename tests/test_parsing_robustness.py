@@ -139,3 +139,27 @@ def test_discarded_findings_are_visible_in_log_and_report():
     assert any("tecnica" in ln and "H2" in ln and "sin evidencia" in ln for ln in result.log)
     md = render_markdown(build_report(result, today=date(2026, 10, 4)))
     assert "H2" in md and "sin evidencia" in md
+
+
+def test_prose_mentioning_a_finding_inside_the_section_is_not_an_unreadable_finding():
+    # Una frase que CITA un hallazgo no pretende definir uno: no es fallo de formato (ni se cuenta).
+    text = VALID_OUTPUT.replace(
+        "## Quick wins", "Resumen: priorizar [H1] antes de abordar el resto.\n## Quick wins", 1
+    )
+    r = parse_agent_output(text)
+    assert [f.id for f in r.findings] == ["H1", "H2", "H3"] and r.warnings == []
+
+
+@pytest.mark.parametrize("line", [
+    "[H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+    "+ [H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+    "2) **[H2]** Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+    "• [H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+    "– [H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+    "IV) **[H2]** Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+    "b) [H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+    "1.[H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt",
+])
+def test_lines_that_start_like_a_finding_are_still_unreadable(line):
+    with pytest.raises(FormatError, match="ilegible"):
+        parse_agent_output(VALID_OUTPUT.replace(H2_LINE, line))

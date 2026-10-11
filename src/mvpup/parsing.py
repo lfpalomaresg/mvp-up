@@ -75,9 +75,12 @@ _NO_EVIDENCE_RE = re.compile(
     r"^(?:n\s*/?\s*d\b|n/a\b|sin evidencia|ninguna\b|no (?:verificad|comprobad|disponible)|[-—–]+$|$)",
     re.IGNORECASE,
 )
-# Cualquier línea que mencione un `[Hn]` pretende ser un hallazgo: si no se lee, es
-# fallo de formato (reintento), nunca un descarte silencioso.
-_FINDING_LIKE_RE = re.compile(r"\[H\d+\]", re.IGNORECASE)
+# Una línea que EMPIEZA por `[Hn]` pretende ser un hallazgo: si no se lee, es fallo de
+# formato (reintento), nunca un descarte silencioso. Delante se admite cualquier marcador
+# no alfanumérico (viñeta, negrita, espacios) o un enumerador corto (`2.`, `IV)`, `a)`).
+# La prosa que solo cita un hallazgo («Resumen: priorizar [H1]…») no lo es.
+# Sin cuantificador anidado sobre runs (`(X+)*`): una iteración por carácter → sin backtracking exponencial.
+_FINDING_LIKE_RE = re.compile(r"^(?:[^\w\[]|\w{1,3}[.)])*\[H\d+\]", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -176,7 +179,7 @@ def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool)
     for line in lines[1:]:
         fm = _FINDING_RE.match(line)
         if not fm or (require_effort and not fm.group("eff")):
-            if _FINDING_LIKE_RE.search(line):
+            if _FINDING_LIKE_RE.match(line):
                 unreadable.append(f"hallazgo ilegible: {line!r}")
             continue
         evidence = (fm.group("ev") or "").strip()
@@ -233,7 +236,7 @@ def _require(sections: dict[str, list[str]], template: Template, text: str) -> N
 
 
 def _count_finding_lines(lines: list[str]) -> int:
-    return sum(1 for ln in lines[1:] if _FINDING_LIKE_RE.search(ln))
+    return sum(1 for ln in lines[1:] if _FINDING_LIKE_RE.match(ln))
 
 
 def parse_agent_output(text: str) -> DimensionResult:
