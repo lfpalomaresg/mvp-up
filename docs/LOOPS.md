@@ -169,3 +169,13 @@ revisión adversarial (careo) → sello conclave → commit.
   validación previa · ficha mínima con repo (qué es / estado / repo, como pide SKILL.md) ·
   mensaje honesto cuando el anclaje ya existía.
   Idempotencia por informe (no por fecha/score): dos pasadas el mismo día se anclan ambas.
+
+## Loop 11 — Dry-run de extremo a extremo, parser con fallo cerrado, puerta de tipos (2026-10-11)
+- **Audit:** no había forma de ver la tubería completa sin API key (solo `--runner fake` con un
+  JSON hecho a mano); el parser descartaba en silencio hallazgos numerados o sin evidencia y sus
+  `warnings` no llegaban a nadie; un JSON anterior corrupto reventaba el informe tras pagar la
+  pasada; mypy `--check-untyped-defs` daba 9 errores.
+- **Hecho:** `run --dry-run` (`dryrun.py`), parser con mensajes explícitos y fallo cerrado,
+  avisos visibles en log e informe, y 8 loops (compare, roadmap, cli ×3, report, runners,
+  typing) con test en rojo previo cada uno. 241 → 311 tests; mypy 0 errores; mypy en CI.
+- **Detalle y decisiones:** [`10_SESSION_NOTES.md`](10_SESSION_NOTES.md).
