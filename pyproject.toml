@@ -15,7 +15,7 @@ mvpup = "mvpup.cli:main"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=1.11"]  # output_config.effort verificado en 1.11
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "mypy>=1.10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -23,3 +23,13 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# Extra opcional: el núcleo no lo necesita y en CI no se instala.
+module = "anthropic"
+ignore_missing_imports = true

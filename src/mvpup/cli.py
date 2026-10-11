@@ -240,13 +240,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
     report = build_report(result, base_dir=out, dry_run=args.dry_run)
     path = save_report(report, out)
-    if args.anclar:
-        written = anchor_ficha(Path(intake.ficha_path), path, report.global_score, report.date,
+    if args.anclar and intake.ficha_path:  # la ficha ya se exigió arriba; aquí solo se estrecha el tipo
+        ficha = Path(intake.ficha_path)
+        written = anchor_ficha(ficha, path, report.global_score, report.date,
                                product=intake.product, repo=intake.repo_path)
         if written:
-            print(f"Anclaje «LEER AL RETOMAR» añadido a {intake.ficha_path}")
+            print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
         else:
-            print(f"La ficha {intake.ficha_path} ya tenía el anclaje de este informe: sin cambios")
+            print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
@@ -266,15 +267,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
     text = Path(args.file).read_text(encoding="utf-8")
     try:
         if args.ligera:
-            r = parse_ligera_output(text)
-            print(f"OK · ligera · score {r.score:g}/10 · {len(r.findings)} hallazgos")
+            ligera = parse_ligera_output(text)
+            print(f"OK · ligera · score {ligera.score:g}/10 · {len(ligera.findings)} hallazgos")
+            for w in ligera.warnings:
+                print(f"  ⚠️ {w}")
         else:
             dims = tuple(sorted(args.dims, key=list(Dimension).index))
             if not dims:
                 raise SystemExit("indica --dims (o --ligera)")
-            for dim, r in parse_grouped_output(text, dims).items():
-                print(f"OK · {dim.value} · score {r.score:g}/10 · {len(r.findings)} hallazgos")
-                for w in r.warnings:
+            for dim, result in parse_grouped_output(text, dims).items():
+                print(f"OK · {dim.value} · score {result.score:g}/10 · {len(result.findings)} hallazgos")
+                for w in result.warnings:
                     print(f"  ⚠️ {w}")
     except FormatError as exc:
         print("FORMATO INVÁLIDO:", file=sys.stderr)
