@@ -22,6 +22,7 @@ from typing import TextIO
 from .config import ModelPolicyError, check_model
 from .dimensions import Dimension, Mode, Objective, Stage
 from .intake import Intake, IntakeError
+from .orchestrator import DEFAULT_AGENT_TIMEOUT
 from .parsing import FormatError, parse_grouped_output, parse_ligera_output
 from .prompts import build_task_prompt
 from .redaction import redact
@@ -68,6 +69,17 @@ def _dims(value: str) -> frozenset[Dimension]:
     except ValueError as exc:
         valid = ", ".join(d.value for d in Dimension)
         raise argparse.ArgumentTypeError(f"dimensión inválida (válidas: {valid})") from exc
+
+
+def _positive_seconds(value: str) -> float:
+    """`--timeout`: segundos > 0 (0, negativo o NaN dejarían fallar a todos los agentes tras lanzar)."""
+    try:
+        seconds = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"--timeout debe ser un número de segundos: {value!r}") from exc
+    if not seconds > 0:  # `not >` también descarta NaN
+        raise argparse.ArgumentTypeError(f"--timeout debe ser mayor que 0: {value!r}")
+    return seconds
 
 
 def _add_intake_args(p: argparse.ArgumentParser) -> None:
@@ -305,7 +317,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="pasada completa con agentes simulados y datos sintéticos (sin red ni API key)")
     p_run.add_argument("--model", help="modelo de los agentes (por defecto claude-sonnet-5-5)")
     p_run.add_argument("--out", help=f"carpeta de informes (o ${REPORTS_ENV}; por defecto ./{DEFAULT_REPORTS_DIR})")
-    p_run.add_argument("--timeout", type=float, default=900.0, help="segundos por intento de agente")
+    p_run.add_argument("--timeout", type=_positive_seconds, default=DEFAULT_AGENT_TIMEOUT,
+                       help="segundos por intento de agente (> 0)")
     p_run.add_argument("--anclar", action="store_true",
                        help="añade a --ficha la sección «⚡ MVP-UP … LEER AL RETOMAR» (opt-in)")
     p_run.set_defaults(func=cmd_run)

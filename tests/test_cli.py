@@ -252,3 +252,14 @@ def test_dry_run_is_incompatible_with_fake_runner_and_anchor(tmp_path, capsys):
                  "--out", str(tmp_path / "i")]) == 2
     assert "--anclar" in capsys.readouterr().err
     assert not (tmp_path / "f.md").exists() and not (tmp_path / "i").exists()
+
+
+# --- loop 3: --timeout se valida antes de lanzar la pasada ---
+
+@pytest.mark.parametrize("value", ["0", "-5", "nan", "abc"])
+def test_non_positive_timeout_is_a_usage_error_before_the_pass(tmp_path, capsys, value):
+    with pytest.raises(SystemExit) as exc:
+        main(["run", *BASE, "--dry-run", "--timeout", value, "--out", str(tmp_path / "inf")])
+    assert exc.value.code == 2
+    assert "--timeout" in capsys.readouterr().err
+    assert not (tmp_path / "inf").exists()
