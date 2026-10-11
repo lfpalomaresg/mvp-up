@@ -22,7 +22,7 @@ from .intake import Intake
 from .orchestrator import PassResult
 from .parsing import LIGERA_TEMPLATE
 from .roadmap import Horizon, Roadmap, build_roadmap, top_five
-from .scoring import global_score, status_icon
+from .scoring import fmt_score, global_score, status_icon
 
 SCHEMA_VERSION = 1
 
@@ -148,14 +148,6 @@ def build_report(
                     f"({type(exc).__name__}: {exc}); compararla a mano."
                 ]
     return report
-
-
-def fmt_score(score: float | None, decimals: int | None = None) -> str:
-    if score is None:
-        return "—"
-    if decimals is None:
-        decimals = 0 if float(score).is_integer() else 1
-    return f"{score:.{decimals}f}".replace(".", ",")
 
 
 def _entry(e: Entry) -> str:
@@ -398,7 +390,7 @@ def anchor_ficha(
     Si la ficha no existe se crea la mínima (qué es / estado / repo / informe). Devuelve True
     si escribió algo; un mismo informe no se ancla dos veces. Nunca reescribe contenido existente: solo añade al final.
     """
-    title = ANCHOR_TITLE.format(score=fmt_score(score, 1) if score is not None else "—", date=when.isoformat())
+    title = ANCHOR_TITLE.format(score=fmt_score(score, 1), date=when.isoformat())
     pointer = f"Informe: `{report_path}`"
     block = f"\n{title}\n{pointer} — la próxima sesión sobre este producto arranca leyéndolo.\n"
     if ficha.exists():

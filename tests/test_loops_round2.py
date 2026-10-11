@@ -71,3 +71,26 @@ def test_pass_with_nothing_evaluated_leaves_the_ficha_untouched(tmp_path, capsys
     code = main([*BASE, "--runner", "fake", "--fake-responses", str(resp), "--out", str(tmp_path / "inf"),
                  "--ficha", str(missing), "--anclar"])
     assert code == 3 and not missing.exists()
+
+
+# --- loop 5: tres formateadores de score distintos; la Evolución decía «6/10» y la cabecera «6,0/10» ---
+
+def test_previous_global_score_in_evolution_uses_the_same_format_as_the_header():
+    from datetime import date
+
+    from mvpup import compare, portfolio, report, scoring
+    from mvpup.compare import compare_with_previous
+    from mvpup.dimensions import Objective, Stage
+    from mvpup.intake import Intake
+    from mvpup.orchestrator import run_pass
+    from mvpup.report import build_report
+    from mvpup.runners import FakeRunner
+
+    assert scoring.fmt_score(6.0, 1) == "6,0" and scoring.fmt_score(6.25) == "6,2" and scoring.fmt_score(None) == "—"
+    assert report.fmt_score is scoring.fmt_score  # un único formateador para informe, comparación y cartera
+    assert compare.fmt_score is scoring.fmt_score and portfolio.fmt_score is scoring.fmt_score
+    intake = Intake(product="Demo", stage=Stage.MVP, objective=Objective.INGRESOS)
+    rep = build_report(run_pass(intake, FakeRunner({"*": VALID_OUTPUT})), today=date(2026, 10, 4))
+    compare_with_previous(rep, {"schema": 1, "date": "2026-09-01", "objective": "ingresos", "global_score": 6.0,
+                                "scores": {"tecnica": 6}})
+    assert "score global 6,0/10" in rep.evolution[0]

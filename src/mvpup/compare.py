@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, TypeGuard
 
 from .dimensions import Dimension, Objective
 from .parsing import Finding
-from .scoring import global_score
+from .scoring import fmt_score, global_score
 
 if TYPE_CHECKING:
     from .report import Report
@@ -45,13 +45,9 @@ def older_than_six_months(previous: date, today: date) -> bool:
     return today > date(year, month, day)
 
 
-def _fmt(value: float) -> str:
-    return (f"{value:g}" if float(value).is_integer() else f"{value:.1f}").replace(".", ",")
-
-
-def _fmt1(value: float | None) -> str:
-    """Score global con un decimal, como en la cabecera del informe («6,0/10»)."""
-    return "—" if value is None else f"{value:.1f}".replace(".", ",") + "/10"
+def _global(value: float | None) -> str:
+    """Score global con un decimal y «/10», como en la cabecera del informe («6,0/10»)."""
+    return "—" if value is None else fmt_score(value, 1) + "/10"
 
 
 def format_delta(previous: float | None, current: float | None) -> str:
@@ -63,8 +59,8 @@ def format_delta(previous: float | None, current: float | None) -> str:
     if diff == 0:
         return "="
     if diff > 0:
-        return f"+{_fmt(diff)}"
-    return f"🔴 -{_fmt(-diff)}"
+        return f"+{fmt_score(diff)}"
+    return f"🔴 -{fmt_score(-diff)}"
 
 
 def _norm(text: str) -> str:
@@ -204,7 +200,7 @@ def _context_warnings(
         warnings.append(
             f"⚠️ El objetivo de valor cambió ({prev_objective} → {current_objective.value}): "
             "los Δ son **no comparables directamente**. Score anterior recalculado con los "
-            f"pesos nuevos: {_fmt(recomputed) + '/10' if recomputed is not None else 'N/D'}."
+            f"pesos nuevos: {fmt_score(recomputed) + '/10' if recomputed is not None else 'N/D'}."
         )
     return warnings, changed
 
@@ -212,7 +208,7 @@ def _context_warnings(
 def _delta(prev: float | None, score: float | None, objective_changed: bool) -> str:
     if objective_changed and prev is not None and score is not None:
         # Con pesos distintos el Δ no es evolución comparable: se muestra sin juicio.
-        return f"n/c ({_fmt(prev)}→{_fmt(score)})"
+        return f"n/c ({fmt_score(prev)}→{fmt_score(score)})"
     return format_delta(prev, score)
 
 
@@ -250,7 +246,7 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
 
     header = f"- Pasada anterior: {previous['date'] if prev_date else 'fecha desconocida'}"
     if prev_global is not None:
-        header += f" · score global {_fmt(prev_global)}/10"
+        header += f" · score global {_global(prev_global)}"
     evolution = [header]
     warnings, objective_changed = _context_warnings(
         previous, prev_scores, prev_date, report.date, intake.stage.value, intake.objective
@@ -262,7 +258,7 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
 
     both = _both_scored(current, prev_scores)
     if objective_changed:
-        moved = [f"{d.label} {_fmt(p)} → {_fmt(s)}" for d, p, s in both if s != p]
+        moved = [f"{d.label} {fmt_score(p)} → {fmt_score(s)}" for d, p, s in both if s != p]
         if moved:
             evolution.append(
                 "- Variaciones por dimensión (sin valorar, objetivo cambiado): " + "; ".join(moved) + "."
@@ -271,7 +267,7 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
         for dim, prev, score in both:
             if score < prev:
                 evolution.append(
-                    f"- 🔴 {dim.label} bajó {_fmt(prev)} → {_fmt(score)}. "
+                    f"- 🔴 {dim.label} bajó {fmt_score(prev)} → {fmt_score(score)}. "
                     f"{_drop_cause(dim, pr.results[dim].findings, previous)}"
                 )
         risen = [d.label for d, p, s in both if s > p]
@@ -369,7 +365,7 @@ def diff_reports(previous: Mapping[str, Any], current: Mapping[str, Any]) -> Rep
         for dim in sorted(set(prev_scores) | set(cur_scores), key=order.index)
     ]
     if objective_changed and prev_global is not None and cur_global is not None:
-        global_delta = f"n/c ({_fmt1(prev_global)}→{_fmt1(cur_global)})"
+        global_delta = f"n/c ({_global(prev_global)}→{_global(cur_global)})"
     else:
         global_delta = format_delta(prev_global, cur_global)
 
@@ -398,7 +394,7 @@ def diff_reports(previous: Mapping[str, Any], current: Mapping[str, Any]) -> Rep
 
 
 def _score_cell(value: float | None) -> str:
-    return "—" if value is None else f"{_fmt(value)}/10"
+    return "—" if value is None else f"{fmt_score(value)}/10"
 
 
 def render_diff(diff: ReportDiff) -> str:
@@ -406,8 +402,8 @@ def render_diff(diff: ReportDiff) -> str:
     lines = [
         f"# MVP-UP · Comparación · {diff.product}",
         "",
-        f"**Pasada anterior:** {diff.previous_date} · score global {_fmt1(diff.previous_global)}",
-        f"**Pasada nueva:** {diff.current_date} · score global {_fmt1(diff.current_global)}",
+        f"**Pasada anterior:** {diff.previous_date} · score global {_global(diff.previous_global)}",
+        f"**Pasada nueva:** {diff.current_date} · score global {_global(diff.current_global)}",
         f"**Δ score global:** {diff.global_delta}",
         "",
         "## Δ por dimensión",
