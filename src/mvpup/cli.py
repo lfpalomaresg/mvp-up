@@ -47,6 +47,8 @@ CRITICAL_MODEL = "claude-opus-5-5"
 
 def cost_hint(mode: Mode, agents: int) -> str:
     """Coste orientativo; si el plan se sale de lo calibrado, se escala por agente."""
+    if agents <= 0:
+        return "sin agentes que lanzar (ninguna dimensión evaluable) · 0 tokens"
     calibrated = {Mode.LIGERA: (1, 1), Mode.EXPRESS: (3, 5), Mode.FULL: (10, 10)}[mode]
     if calibrated[0] <= agents <= calibrated[1]:
         return f"{COST_HINT[mode]} · {agents} agentes"

@@ -263,3 +263,16 @@ def test_non_positive_timeout_is_a_usage_error_before_the_pass(tmp_path, capsys,
     assert exc.value.code == 2
     assert "--timeout" in capsys.readouterr().err
     assert not (tmp_path / "inf").exists()
+
+
+# --- loop 4: coste orientativo con un plan vacío ---
+
+def test_cost_hint_with_no_agents_says_so_instead_of_zero_tokens(capsys):
+    from mvpup.cli import cost_hint
+    from mvpup.dimensions import Mode
+
+    assert "0-0k" not in cost_hint(Mode.EXPRESS, 0)
+    assert "sin agentes" in cost_hint(Mode.LIGERA, 0)
+    main(["plan", *BASE, "--remove", "tecnica,producto_ux,comercial,marketing"])
+    out = capsys.readouterr().out
+    assert "sin agentes" in out and "0-0k" not in out
