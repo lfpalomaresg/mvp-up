@@ -1,10 +1,12 @@
-"""CLI: `mvpup plan | run | validate | cartera`.
+"""CLI: `mvpup plan | run | validate | cartera | compare | html`.
 
 - plan: muestra la selección, los agentes, avisos y el coste orientativo (sin red).
 - run: ejecuta la pasada y guarda el informe versionado (MD + JSON).
 - validate: valida contra la plantilla la salida de un agente lanzado a mano
   (p.ej. desde subagentes de Claude Code).
 - cartera: síntesis transversal de los últimos informes de 2+ productos.
+- compare: deltas por dimensión y acciones cerradas/nuevas entre dos informes guardados.
+- html: informe HTML autocontenido (sin CDN ni JS externo) a partir de un Markdown.
 
 El disparo es siempre manual; el modo full exige `--confirm-full`.
 """
@@ -16,8 +18,9 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from .config import ModelPolicyError, check_model
 from .dimensions import Dimension, Mode, Objective, Stage
@@ -26,6 +29,7 @@ from .orchestrator import DEFAULT_AGENT_TIMEOUT
 from .parsing import FormatError, parse_grouped_output, parse_ligera_output
 from .prompts import build_task_prompt
 from .redaction import redact
+from .report import Report
 from .runners import AgentRunner
 from .selection import Plan, build_plan
 
@@ -43,6 +47,10 @@ TOKENS_PER_AGENT_K = (60, 100)
 
 CRITICAL_OBJECTIVES = (Objective.VENDIBLE, Objective.INVERSION)
 CRITICAL_MODEL = "claude-opus-5-5"
+
+
+class CliError(Exception):
+    """Error de uso previsible: mensaje claro y código 2, sin traceback."""
 
 
 def cost_hint(mode: Mode, agents: int) -> str:
@@ -151,7 +159,7 @@ def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
         from .runners import FakeRunner
 
         if not args.fake_responses:
-            raise SystemExit("--runner fake requiere --fake-responses <json {task_key: salida}>")
+            raise CliError("--runner fake requiere --fake-responses <json {task_key: salida}>")
         data = json.loads(Path(args.fake_responses).read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("--fake-responses debe ser un objeto JSON {task_key: salida}")
@@ -167,10 +175,6 @@ def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
         raise CliError(f"falta {API_KEY_ENV}: defínela en .env (gitignoreado) o en el entorno")
     snapshot = repo_snapshot(intake.repo_path) if intake.repo_path else ""
     return AnthropicRunner(model=args.model, snapshot=snapshot, model_by_key=critical_models(intake))
-
-
-class CliError(Exception):
-    """Error de uso previsible: mensaje claro y código 2, sin traceback."""
 
 
 def _git(probe: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -212,7 +216,7 @@ def check_out_dir(out: Path) -> None:
 
 def cmd_run(args: argparse.Namespace) -> int:
     from .orchestrator import run_pass
-    from .report import anchor_ficha, build_report, save_report
+    from .report import build_report, save_report
 
     intake = _intake(args)
     if args.model:
@@ -222,6 +226,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise CliError("--anclar requiere --ficha <ruta de la ficha del producto>")
     if args.dry_run and (args.runner == "fake" or args.fake_responses):
         raise CliError("--dry-run ya simula los agentes: no se combina con --runner fake/--fake-responses")
+    if args.fake_responses and args.runner != "fake":
+        # Sin esto el fichero se ignoraba y la pasada salía con agentes REALES (y coste).
+        raise CliError("--fake-responses solo tiene sentido con --runner fake (¿querías simular la pasada?)")
     if args.dry_run and args.anclar:
         raise CliError("--anclar no se combina con --dry-run: un informe sintético no se ancla en una ficha real")
     out = Path(args.out or os.environ.get(REPORTS_ENV) or DEFAULT_REPORTS_DIR)
@@ -240,20 +247,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
     report = build_report(result, base_dir=out, dry_run=args.dry_run)
     path = save_report(report, out)
-    if args.anclar and intake.ficha_path:  # la ficha ya se exigió arriba; aquí solo se estrecha el tipo
-        ficha = Path(intake.ficha_path)
-        written = anchor_ficha(ficha, path, report.global_score, report.date,
-                               product=intake.product, repo=intake.repo_path)
-        if written:
-            print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
-        else:
-            print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
+    if args.html:
+        print(f"HTML: {write_html(path)}")
     if not result.results and result.ligera is None:
         print("⚠️  No se evaluó ninguna dimensión: revisa el log de la pasada.", file=sys.stderr)
+        if intake.ficha_path:
+            print(f"La ficha {intake.ficha_path} no se ancla a una pasada vacía.", file=sys.stderr)
         return 3
+    if intake.ficha_path and args.dry_run:
+        print(f"DRY-RUN: la ficha {intake.ficha_path} no se toca (datos sintéticos).", file=sys.stderr)
+    elif intake.ficha_path:
+        _anchor(Path(intake.ficha_path), intake, report, path, block=args.anclar)
     if report.global_score is not None:
         print(f"Score global: {report.global_score:.1f}/10".replace(".", ","))
     if report.top:
@@ -261,6 +268,22 @@ def cmd_run(args: argparse.Namespace) -> int:
         for n, item in enumerate(report.top, 1):
             print(f"  {n}. {item}")
     return 0
+
+
+def _anchor(ficha: Path, intake: Intake, report: Report, path: Path, block: bool) -> None:
+    """Ancla el informe en la ficha: frontmatter siempre; bloque «LEER AL RETOMAR» solo con --anclar."""
+    from .ficha import anchor_ficha, anchor_frontmatter
+
+    if anchor_frontmatter(ficha, report.date, report.global_score, path, product=intake.product):
+        print(f"Ficha {ficha}: frontmatter actualizado (mvpup_date, mvpup_score, mvpup_report)")
+    else:
+        print(f"Ficha {ficha}: frontmatter ya anclado a este informe, sin cambios")
+    if not block:
+        return
+    if anchor_ficha(ficha, path, report.global_score, report.date, product=intake.product, repo=intake.repo_path):
+        print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
+    else:
+        print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -274,7 +297,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         else:
             dims = tuple(sorted(args.dims, key=list(Dimension).index))
             if not dims:
-                raise SystemExit("indica --dims (o --ligera)")
+                raise CliError("indica --dims <dimensiones> (o --ligera)")
             for dim, result in parse_grouped_output(text, dims).items():
                 print(f"OK · {dim.value} · score {result.score:g}/10 · {len(result.findings)} hallazgos")
                 for w in result.warnings:
@@ -308,6 +331,49 @@ def cmd_cartera(args: argparse.Namespace) -> int:
     return 0
 
 
+def load_report_json(path: Path) -> dict[str, Any]:
+    """JSON gemelo de un informe guardado (acepta la ruta del `.md` o del `.json`)."""
+    json_path = path.with_suffix(".json") if path.suffix.lower() == ".md" else path
+    if path.suffix.lower() == ".md" and not json_path.exists():
+        raise CliError(f"el informe {path} no tiene JSON gemelo ({json_path.name}): no se puede comparar")
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("scores"), dict):
+        raise CliError(f"{json_path} no parece el JSON de un informe MVP-UP (falta `scores`)")
+    return data
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    from .compare import diff_reports, render_diff
+
+    previous = load_report_json(Path(args.previous))
+    current = load_report_json(Path(args.current))
+    md = render_diff(diff_reports(previous, current))
+    if args.save:
+        target = Path(args.save)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(md, encoding="utf-8")
+        print(f"Comparación guardada: {target}")
+    else:
+        print(md, end="")
+    return 0
+
+
+def write_html(markdown_path: Path, target: Path | None = None) -> Path:
+    """Escribe el HTML autocontenido de un Markdown (por defecto, junto a él con extensión .html)."""
+    from .htmlreport import render_html
+
+    html_path = target or markdown_path.with_suffix(".html")
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(render_html(markdown_path.read_text(encoding="utf-8")), encoding="utf-8")
+    return html_path
+
+
+def cmd_html(args: argparse.Namespace) -> int:
+    path = write_html(Path(args.file), Path(args.out) if args.out else None)
+    print(f"HTML: {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mvpup", description="Orquestador MVP-UP")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -329,6 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="segundos por intento de agente (> 0)")
     p_run.add_argument("--anclar", action="store_true",
                        help="añade a --ficha la sección «⚡ MVP-UP … LEER AL RETOMAR» (opt-in)")
+    p_run.add_argument("--html", action="store_true", help="guarda también el informe como HTML autocontenido")
     p_run.set_defaults(func=cmd_run)
 
     p_val = sub.add_parser("validate", help="valida la salida de un agente contra su plantilla")
@@ -341,13 +408,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_cart.add_argument("--out", help=f"carpeta de informes (o ${REPORTS_ENV})")
     p_cart.add_argument("--save", action="store_true", help="guarda <out>/_cartera.md")
     p_cart.set_defaults(func=cmd_cartera)
+
+    p_cmp = sub.add_parser("compare", help="deltas entre dos informes ya guardados (anterior → nuevo)")
+    p_cmp.add_argument("previous", help="informe anterior (.md con JSON gemelo, o el .json)")
+    p_cmp.add_argument("current", help="informe nuevo (.md con JSON gemelo, o el .json)")
+    p_cmp.add_argument("--save", help="guarda el resumen Markdown en esta ruta en vez de imprimirlo")
+    p_cmp.set_defaults(func=cmd_compare)
+
+    p_html = sub.add_parser("html", help="informe HTML autocontenido (sin CDN ni JS) a partir de un .md")
+    p_html.add_argument("file", help="Markdown de un informe, comparación o síntesis de cartera")
+    p_html.add_argument("--out", help="ruta del .html (por defecto, junto al .md)")
+    p_html.set_defaults(func=cmd_html)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    command: Callable[[argparse.Namespace], int] = args.func
     try:
-        return args.func(args)
+        return command(args)
     except IntakeError as exc:
         print(f"Intake inválido: {exc}", file=sys.stderr)
         return 2

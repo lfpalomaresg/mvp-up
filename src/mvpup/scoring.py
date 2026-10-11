@@ -26,6 +26,19 @@ def global_score(scores: Mapping[Dimension, float | None], objective: Objective)
     return round(total / weights, 1)
 
 
+def fmt_score(score: float | None, decimals: int | None = None) -> str:
+    """Score en formato español («6», «6,5»; con `decimals=1` siempre «6,0»); None → «—».
+
+    Único formateador de scores: informe, comparación y cartera lo comparten para que un
+    mismo valor no salga «6/10» en un sitio y «6,0/10» en otro.
+    """
+    if score is None:
+        return "—"
+    if decimals is None:
+        decimals = 0 if float(score).is_integer() else 1
+    return f"{score:.{decimals}f}".replace(".", ",")
+
+
 def status_icon(score: float | None) -> str:
     if score is None:
         return "⚪"

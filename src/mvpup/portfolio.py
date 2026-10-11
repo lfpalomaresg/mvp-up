@@ -17,6 +17,7 @@ from typing import Any
 
 from .dimensions import Dimension
 from .report import REPORT_NAME_RE, SCHEMA_VERSION, report_sort_key
+from .scoring import fmt_score
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 WEAK_THRESHOLD = 4  # ≤4 = deficiente según la rúbrica común
@@ -135,8 +136,8 @@ def synthesize(reports: list[dict[str, Any]]) -> Portfolio:
     return portfolio
 
 
-def _fmt(value: Any) -> str:
-    return f"{float(value):.1f}".replace(".", ",") + "/10" if isinstance(value, (int, float)) else "—"
+def _global(value: Any) -> str:
+    return fmt_score(float(value), 1) + "/10" if _is_number(value) else "—"
 
 
 def render_portfolio(portfolio: Portfolio) -> str:
@@ -153,7 +154,7 @@ def render_portfolio(portfolio: Portfolio) -> str:
             lines += ["", f"### Objetivo: {objective}"]
         lines += ["", "| Proyecto | Score global | Fecha |", "|---|---|---|"]
         lines += [
-            f"| {r.get('product', r.get('slug'))} | {_fmt(r.get('global_score'))} | {r.get('date', '—')} |"
+            f"| {r.get('product', r.get('slug'))} | {_global(r.get('global_score'))} | {r.get('date', '—')} |"
             for r in ranked
         ]
     lines += ["", "## Cobertura por dimensión", "", "| Dimensión | Evaluada en |", "|---|---|"]

@@ -102,7 +102,7 @@ def _related(a: frozenset[str], b: frozenset[str]) -> bool:
     return shared >= 2 and shared / min(len(a), len(b)) >= 0.6
 
 
-def _canonical(entry: Entry) -> tuple:
+def _canonical(entry: Entry) -> tuple[int, int, str, str]:
     """Orden total independiente del orden en que terminaron los agentes."""
     return (
         _IMPACT_RANK[entry.finding.impact],
