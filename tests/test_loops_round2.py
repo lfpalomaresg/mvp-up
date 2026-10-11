@@ -35,3 +35,20 @@ def test_fake_responses_without_fake_runner_is_a_usage_error_before_any_runner(t
     err = capsys.readouterr().err
     assert "--runner fake" in err and "Traceback" not in err
     assert not (tmp_path / "inf").exists()
+
+
+# --- loop 2: errores de uso lanzados como SystemExit(msg) salían con código 1, no 2 ---
+
+def test_validate_without_dims_is_a_usage_error_with_exit_2(tmp_path, capsys):
+    good = tmp_path / "ok.md"
+    good.write_text(VALID_OUTPUT, encoding="utf-8")
+    assert main(["validate", str(good)]) == 2
+    err = capsys.readouterr().err
+    assert "--dims" in err and err.startswith("Error:")
+
+
+def test_fake_runner_without_responses_is_a_usage_error_with_exit_2(tmp_path, capsys):
+    assert main([*BASE, "--runner", "fake", "--out", str(tmp_path / "inf")]) == 2
+    err = capsys.readouterr().err
+    assert "--fake-responses" in err and err.startswith("Error:")
+    assert not (tmp_path / "inf").exists()

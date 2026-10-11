@@ -47,6 +47,10 @@ CRITICAL_OBJECTIVES = (Objective.VENDIBLE, Objective.INVERSION)
 CRITICAL_MODEL = "claude-opus-5-5"
 
 
+class CliError(Exception):
+    """Error de uso previsible: mensaje claro y código 2, sin traceback."""
+
+
 def cost_hint(mode: Mode, agents: int) -> str:
     """Coste orientativo; si el plan se sale de lo calibrado, se escala por agente."""
     if agents <= 0:
@@ -153,7 +157,7 @@ def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
         from .runners import FakeRunner
 
         if not args.fake_responses:
-            raise SystemExit("--runner fake requiere --fake-responses <json {task_key: salida}>")
+            raise CliError("--runner fake requiere --fake-responses <json {task_key: salida}>")
         data = json.loads(Path(args.fake_responses).read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("--fake-responses debe ser un objeto JSON {task_key: salida}")
@@ -169,10 +173,6 @@ def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
         raise CliError(f"falta {API_KEY_ENV}: defínela en .env (gitignoreado) o en el entorno")
     snapshot = repo_snapshot(intake.repo_path) if intake.repo_path else ""
     return AnthropicRunner(model=args.model, snapshot=snapshot, model_by_key=critical_models(intake))
-
-
-class CliError(Exception):
-    """Error de uso previsible: mensaje claro y código 2, sin traceback."""
 
 
 def _git(probe: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -289,7 +289,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         else:
             dims = tuple(sorted(args.dims, key=list(Dimension).index))
             if not dims:
-                raise SystemExit("indica --dims (o --ligera)")
+                raise CliError("indica --dims <dimensiones> (o --ligera)")
             for dim, result in parse_grouped_output(text, dims).items():
                 print(f"OK · {dim.value} · score {result.score:g}/10 · {len(result.findings)} hallazgos")
                 for w in result.warnings:
