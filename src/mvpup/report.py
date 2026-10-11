@@ -185,7 +185,7 @@ def _scores_table(report: Report) -> list[str]:
 def _roadmap_lines(roadmap: Roadmap) -> list[str]:
     out: list[str] = []
     for h in Horizon:
-        out.append(f"### {h.value} — {h.title}")
+        out.append(f"### {h.value} — {h.label}")
         items = roadmap.items(h)
         if not items:
             out.append("- (sin acciones)")

@@ -33,8 +33,15 @@ class Horizon(str, Enum):
     H3 = "H3"
 
     @property
-    def title(self) -> str:
-        return {"H1": "Esta semana (quick wins)", "H2": "Este mes", "H3": "Trimestre"}[self.value]
+    def label(self) -> str:
+        return HORIZON_LABELS[self]
+
+
+HORIZON_LABELS: dict[Horizon, str] = {
+    Horizon.H1: "Esta semana (quick wins)",
+    Horizon.H2: "Este mes",
+    Horizon.H3: "Trimestre",
+}
 
 
 @dataclass(frozen=True)
