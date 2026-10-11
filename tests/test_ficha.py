@@ -104,6 +104,29 @@ def test_unclosed_leading_fence_is_body_not_frontmatter(tmp_path):
     assert text.startswith("---\nmvpup_date: 2026-10-11\n")
 
 
+def test_mixed_crlf_and_lf_frontmatter_is_still_recognised_and_not_duplicated(tmp_path):
+    # Ficha sincronizada entre equipos: el fence va con CRLF y una clave con LF. Sin esto el cierre
+    # no se reconocía y la ficha recibía un SEGUNDO frontmatter delante del original.
+    ficha = tmp_path / "demo.md"
+    ficha.write_bytes(b"---\r\ntitle: Demo\n---\r\n# Body\n")
+    assert anchor_frontmatter(ficha, WHEN, 6.0, REPORT) is True
+    raw = ficha.read_bytes()
+    assert raw.count(b"---") == 2
+    assert raw.startswith(b"---\r\ntitle: Demo\r\nmvpup_date: 2026-10-11\r\n")
+    assert raw.endswith(b"---\r\n# Body\n")
+    assert anchor_frontmatter(ficha, WHEN, 6.0, REPORT) is False
+
+
+def test_frontmatter_closed_with_dots_keeps_its_closing_fence(tmp_path):
+    ficha = tmp_path / "demo.md"
+    ficha.write_bytes(b"---\ntitle: Demo\n...\n# Body\n")
+    assert anchor_frontmatter(ficha, WHEN, 6.0, REPORT) is True
+    text = ficha.read_text(encoding="utf-8")
+    assert text.startswith("---\ntitle: Demo\nmvpup_date: 2026-10-11\n")
+    assert text.endswith('mvpup_report: "informes/demo/2026-10-11-informe.md"\n...\n# Body\n')
+    assert read_frontmatter(ficha)["mvpup_score"] == "6.0"
+
+
 # --- CLI -----------------------------------------------------------------------------------
 
 BASE = ["run", "--product", "Demo", "--stage", "mvp", "--objective", "ingresos"]

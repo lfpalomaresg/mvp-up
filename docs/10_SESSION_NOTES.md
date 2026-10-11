@@ -88,6 +88,28 @@ estricta de `pyproject` (`disallow_any_generics`, `warn_return_any`, `disallow_u
   diseño (autocontenido real).
 - No se ha añadido ninguna dependencia (ni YAML ni Markdown): el núcleo sigue a cero.
 
+### Revisión del PR #2 (careo nivel 1 con Codex, ejecución local en el Mac)
+
+- Base verificada: la rama parte de `4903127` (= `main` con el PR #1 ya fusionado por squash); sin
+  fusión necesaria. 357 tests en verde y mypy a 0 antes de tocar nada.
+- Ejecutado de verdad: dos dry-runs + `compare` (ruta `.md` y `.json`, `--save`, orden invertido,
+  errores de uso), `html` del informe y de la comparación (XML bien formado con `xml.etree` y
+  `xmllint`; 0 `http`, 0 `script/link/img/@import/url(`), `--ficha` dos veces sobre una ficha
+  ajena con BOM + CRLF (cuerpo byte a byte, comentario y orden conservados, idempotente).
+- Hallazgos corregidos (test rojo visto antes de cada fix):
+  1. `htmlreport.py`: `[x](javascript:…)` o `data:` en texto del modelo acababa como `<a href>` en
+     un HTML «sin JS». Solo `http(s):`, `mailto:` y destinos relativos se enlazan; el resto queda
+     como texto (hallazgo propio, confirmado por Codex: severidad alta).
+  2. `ficha.py`: frontmatter con CRLF y LF mezclados no reconocía el cierre y anteponía un
+     segundo frontmatter (Codex, media). `_split` trocea ahora por `\r\n|\n` sin perder bytes.
+  3. `ficha.py`: un cierre `...` se reescribía como `---` (Codex, baja). Se conserva.
+  4. `htmlreport.py` (rondas 2-3 del careo): `\x01javascript:` eludía el filtro (un navegador
+     descarta los controles iniciales) y U+0001/U+FFFE rompían el XHTML. Se eliminan controles
+     C0/DEL/C1 y no-caracteres de todo el texto (y del `<title>`) antes de escapar.
+- Descartado con motivo: ninguno. Heredado/por diseño: una regla horizontal `---` en la primera
+  línea se interpreta como frontmatter (heurística habitual, no destructiva); claves `mvpup_*`
+  planas duplicadas se consolidan en una.
+
 ## 2026-10-11 — Dry-run, parser con fallo cerrado, 8 loops de automejora
 
 **Rama:** `claude/dry-run-pipeline-ngeroq` (desde `main` en `07880c5`).

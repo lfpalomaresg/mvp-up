@@ -10,6 +10,8 @@ Dos anclajes, los dos sin reescribir nada ajeno:
 Reglas del frontmatter:
 
 - el cuerpo de la ficha se conserva byte a byte (saltos de línea CRLF/LF y BOM incluidos);
+  el frontmatter admite CRLF y LF mezclados (se reescribe con el salto de su fence de apertura)
+  y conserva su fence de cierre («---» o «...»);
 - las demás claves del frontmatter se conservan tal cual (orden, espacios, comentarios);
 - las claves `mvpup_*` se sustituyen en su sitio si ya existen o se añaden al final del
   bloque; una segunda pasada con el mismo informe no cambia nada (idempotente);
@@ -22,6 +24,7 @@ claves son planas y el valor de la ruta va entre comillas dobles escapadas.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -45,18 +48,42 @@ def anchor_values(when: date, score: float | None, report_path: Path | str) -> d
     }
 
 
-def _split(text: str) -> tuple[str, str, list[str] | None, str]:
-    """(BOM, salto de línea, líneas del frontmatter o None, cuerpo intacto)."""
+_NEWLINE_RE = re.compile(r"\r\n|\n")
+
+
+def _lines(text: str) -> list[tuple[str, str]]:
+    """(texto, terminador) por línea, aceptando CRLF y LF mezclados; no se pierde ningún byte."""
+    out: list[tuple[str, str]] = []
+    start = 0
+    for m in _NEWLINE_RE.finditer(text):
+        out.append((text[start:m.start()], m.group(0)))
+        start = m.end()
+    if start < len(text):
+        out.append((text[start:], ""))
+    return out
+
+
+@dataclass(frozen=True)
+class _Split:
+    bom: str
+    newline: str  # el del fence de apertura (o el dominante si no hay frontmatter)
+    frontmatter: list[str] | None  # None: sin frontmatter (o fence inicial sin cerrar: es cuerpo)
+    closing: str  # fence de cierre tal cual estaba («---» o «...»)
+    body: str  # cuerpo intacto, byte a byte
+
+
+def _split(text: str) -> _Split:
     bom = _BOM if text.startswith(_BOM) else ""
     rest = text[len(bom):]
-    newline = "\r\n" if "\r\n" in rest else "\n"
-    lines = rest.split(newline)
-    if lines and lines[0] == "---":
+    lines = _lines(rest)
+    if lines and lines[0][0] == "---":
         for i in range(1, len(lines)):
-            if lines[i] in _FENCES:
-                head = sum(len(ln) + len(newline) for ln in lines[: i + 1])
-                return bom, newline, lines[1:i], rest[head:]
-    return bom, newline, None, rest  # sin frontmatter (o fence inicial sin cerrar: es cuerpo)
+            if lines[i][0] in _FENCES:
+                head = sum(len(t) + len(e) for t, e in lines[: i + 1])
+                newline = lines[0][1] or "\n"
+                return _Split(bom, newline, [t for t, _ in lines[1:i]], lines[i][0], rest[head:])
+    newline = "\r\n" if "\r\n" in rest else "\n"
+    return _Split(bom, newline, None, "---", rest)
 
 
 def _merge(existing: list[str], values: dict[str, str]) -> list[str]:
@@ -87,13 +114,13 @@ def anchor_frontmatter(
     values = anchor_values(when, score, report_path)
     if ficha.exists():
         original = ficha.read_bytes().decode("utf-8")
-        bom, newline, existing, body = _split(original)
+        parts = _split(original)
     else:
         name = product or ficha.stem
-        bom, newline, existing = "", "\n", []
-        body = f"\n# {name}\n\n- Qué es: N/D (completar)\n- Estado: auditado con MVP-UP\n"
-    block = newline.join(["---", *_merge(existing or [], values), "---"]) + newline
-    updated = bom + block + body
+        parts = _Split("", "\n", [], "---", f"\n# {name}\n\n- Qué es: N/D (completar)\n- Estado: auditado con MVP-UP\n")
+    newline = parts.newline
+    block = newline.join(["---", *_merge(parts.frontmatter or [], values), parts.closing]) + newline
+    updated = parts.bom + block + parts.body
     if ficha.exists() and updated == original:
         return False
     ficha.parent.mkdir(parents=True, exist_ok=True)
@@ -103,9 +130,8 @@ def anchor_frontmatter(
 
 def read_frontmatter(ficha: Path) -> dict[str, str]:
     """Valores CRUDOS (texto YAML sin interpretar) de las claves mvpup_* de la ficha."""
-    _, _, existing, _ = _split(ficha.read_bytes().decode("utf-8"))
     out: dict[str, str] = {}
-    for line in existing or []:
+    for line in _split(ficha.read_bytes().decode("utf-8")).frontmatter or []:
         m = _KEY_RE.match(line)
         if m and m.group(1) not in out:
             out[m.group(1)] = line[m.end():].strip()
