@@ -155,7 +155,10 @@ def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
         data = json.loads(Path(args.fake_responses).read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("--fake-responses debe ser un objeto JSON {task_key: salida}")
-        return FakeRunner(data)
+        try:
+            return FakeRunner(data)
+        except TypeError as exc:
+            raise CliError(f"--fake-responses: {exc}") from exc
     from .anthropic_runner import AnthropicRunner, repo_snapshot
     from .config import API_KEY_ENV, load_dotenv
 

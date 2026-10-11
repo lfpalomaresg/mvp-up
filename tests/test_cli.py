@@ -276,3 +276,13 @@ def test_cost_hint_with_no_agents_says_so_instead_of_zero_tokens(capsys):
     main(["plan", *BASE, "--remove", "tecnica,producto_ux,comercial,marketing"])
     out = capsys.readouterr().out
     assert "sin agentes" in out and "0-0k" not in out
+
+
+# --- loop 6: --fake-responses con valores no textuales → código 2 con la clave culpable ---
+
+def test_fake_responses_with_non_text_value_is_a_usage_error(tmp_path, capsys):
+    resp = _write_resp(tmp_path, {"tecnica": 5, "producto_ux": VALID_OUTPUT})
+    assert main(["run", *BASE, "--runner", "fake", "--fake-responses", resp, "--out", str(tmp_path / "inf")]) == 2
+    err = capsys.readouterr().err
+    assert "tecnica" in err and "Traceback" not in err
+    assert not (tmp_path / "inf").exists()

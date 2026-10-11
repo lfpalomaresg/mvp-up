@@ -206,3 +206,16 @@ def test_extra_unrequested_block_is_logged_not_retried(valid_output):
     assert result.unevaluated == ()
     assert len([k for k, _ in runner.calls if k == "comercial+marketing"]) == 1
     assert any("bloque no pedido: legal" in log for log in result.log)
+
+
+# --- loop 6: FakeRunner valida sus respuestas al construirse ---
+
+@pytest.mark.parametrize("bad", [5, None, {"score": 6}, [1, 2], ["ok", 3]])
+def test_fake_runner_rejects_non_text_responses_at_construction(bad):
+    with pytest.raises(TypeError, match="tecnica"):
+        FakeRunner({"tecnica": bad})
+
+
+def test_fake_runner_accepts_text_callables_and_sequences_of_them(valid_output):
+    runner = FakeRunner({"a": valid_output, "b": lambda p: valid_output, "c": [valid_output, lambda p: "x"]})
+    assert runner.run("p", task_key="c") == valid_output and runner.run("p", task_key="c") == "x"
