@@ -102,9 +102,9 @@ def _drop_cause(dim: Dimension, findings: Sequence[Finding], prev_findings: Any)
     if not isinstance(prev_findings, list):
         return "Sin datos de hallazgos de la pasada anterior para atribuir causa (revisar a mano)."
     before = {
-        _norm(f.get("text", ""))
+        _norm(f["text"])
         for f in prev_findings
-        if isinstance(f, dict) and f.get("dimension") == dim.value
+        if isinstance(f, dict) and f.get("dimension") == dim.value and isinstance(f.get("text"), str)
     }
     new_high = [f for f in findings if f.impact.value == "A" and _norm(f.text) not in before]
     if not new_high:

@@ -207,3 +207,13 @@ def test_unexpected_error_in_comparison_is_reported_not_raised(tmp_path, monkeyp
     monkeypatch.setattr(report_module, "compare_with_previous", boom)
     report = build_report(pass_with(), today=date(2026, 10, 4), base_dir=tmp_path)
     assert any("comparación" in ln and "RuntimeError" in ln for ln in report.evolution)
+
+
+def test_corrupt_previous_finding_text_does_not_lose_the_whole_comparison(tmp_path):
+    # `findings[i].text` no textual: se ignora ese hallazgo, no la comparación entera (deltas, caídas).
+    _write_previous(tmp_path, scores={"tecnica": 9},
+                    findings=[{"dimension": "tecnica", "text": 3}, True, {"text": []}, {"dimension": "tecnica"}])
+    report = build_report(pass_with(), today=date(2026, 10, 4), base_dir=tmp_path)
+    assert report.deltas[D.TECNICA] == "🔴 -3"
+    assert any("bajó" in ln for ln in report.evolution)
+    assert not any("falló" in ln for ln in report.evolution)
