@@ -9,6 +9,7 @@ from mvpup.dimensions import Mode, Objective, Stage
 from mvpup.intake import Intake
 from mvpup.orchestrator import run_pass
 from mvpup.report import build_report, render_markdown, report_dir, save_report, slugify
+from mvpup.report import to_json as report_to_json
 from mvpup.runners import FakeRunner
 from mvpup.parsing import GROUP_SEPARATOR
 from support import LIGERA_OUTPUT, VALID_OUTPUT
@@ -108,3 +109,39 @@ def test_missing_data_is_deduplicated_across_dimensions():
     md = render_markdown(build_report(express_pass(), today=TODAY))
     assert md.count("Volumen real de usuarios") == 1
     assert "- Volumen real de usuarios (Técnica, Comercial, Marketing y hype)" in md
+
+
+# --- dry-run: el informe sintético se marca y nunca cuenta como pasada real ---
+
+def synthetic_pass():
+    from mvpup.dryrun import dry_run_responses
+    from mvpup.selection import build_plan
+
+    intake = Intake(product="Producto Demo", stage=Stage.MVP, objective=Objective.INGRESOS)
+    plan = build_plan(intake)
+    return run_pass(intake, FakeRunner(dry_run_responses(plan, intake.mode)), plan=plan)
+
+
+def test_dry_run_report_is_marked_in_markdown_and_json():
+    report = build_report(synthetic_pass(), today=TODAY, dry_run=True)
+    md = render_markdown(report)
+    assert "DRY-RUN" in md.splitlines()[2] or "DRY-RUN" in md.splitlines()[3]
+    assert "NO es una auditoría" in md
+    assert json.loads(json.dumps(report_to_json(report)))["dry_run"] is True
+
+
+def test_dry_run_report_file_is_not_a_pass_and_ignores_previous_passes(tmp_path):
+    real = save_report(build_report(express_pass(), today=TODAY, base_dir=tmp_path), tmp_path)
+    assert real.name == "2026-10-04-informe.md"
+    dry = save_report(build_report(synthetic_pass(), today=TODAY, base_dir=tmp_path, dry_run=True), tmp_path)
+    assert dry.name == "2026-10-04-dry-run.md"
+    assert "Pasada nº 1" in dry.read_text(encoding="utf-8")  # no compara con la pasada real
+    # la siguiente pasada real sigue siendo la nº 2: el dry-run no cuenta
+    nxt = build_report(express_pass(), today=TODAY, base_dir=tmp_path)
+    assert nxt.pass_number == 2
+
+
+def test_real_report_has_no_dry_run_marker():
+    md = render_markdown(build_report(express_pass(), today=TODAY))
+    assert "DRY-RUN" not in md
+    assert report_to_json(build_report(express_pass(), today=TODAY))["dry_run"] is False

@@ -135,3 +135,10 @@ def test_zero_score_ranks_above_missing_score(tmp_path):
     write(tmp_path, "z-cero", "2026-10-01", {"tecnica": 0}, 0.0)
     s = synthesize(load_latest_reports(tmp_path))
     assert [r["slug"] for r in s.ranking_by_objective["ingresos"]] == ["z-cero", "a-sin-score"]
+
+
+def test_dry_run_reports_never_enter_the_portfolio(cartera):
+    data = {"schema": 1, "slug": "app-dos", "date": "2026-10-09", "objective": "ingresos",
+            "global_score": 9.0, "scores": {"tecnica": 9}, "dry_run": True}
+    (cartera / "app-dos" / "2026-10-09-informe.json").write_text(json.dumps(data), encoding="utf-8")
+    assert {r["slug"]: r["date"] for r in load_latest_reports(cartera)}["app-dos"] == "2026-10-02"

@@ -38,6 +38,8 @@ def _valid_report(data: Any) -> bool:
     """Esquema mínimo: si algo no cuadra, el informe se descarta (se usa el anterior)."""
     if not isinstance(data, dict) or not isinstance(data.get("scores"), dict):
         return False
+    if data.get("dry_run"):  # datos sintéticos: jamás entran en la cartera
+        return False
     schema = data.get("schema")
     if type(schema) is not int or schema != SCHEMA_VERSION:  # `True == 1` no cuela
         return False
