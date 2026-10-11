@@ -52,3 +52,22 @@ def test_fake_runner_without_responses_is_a_usage_error_with_exit_2(tmp_path, ca
     err = capsys.readouterr().err
     assert "--fake-responses" in err and err.startswith("Error:")
     assert not (tmp_path / "inf").exists()
+
+
+# --- loop 3: una pasada sin ninguna dimensión evaluada (código 3) anclaba igualmente la ficha ---
+
+def test_pass_with_nothing_evaluated_leaves_the_ficha_untouched(tmp_path, capsys):
+    resp = tmp_path / "basura.json"
+    resp.write_text(json.dumps({"*": "basura"}), encoding="utf-8")
+    ficha = tmp_path / "demo.md"
+    original = "# Demo\n\nFicha ficticia.\n"
+    ficha.write_text(original, encoding="utf-8")
+    code = main([*BASE, "--runner", "fake", "--fake-responses", str(resp), "--out", str(tmp_path / "inf"),
+                 "--ficha", str(ficha), "--anclar"])
+    assert code == 3
+    assert ficha.read_text(encoding="utf-8") == original
+    assert "no se ancla" in capsys.readouterr().err
+    missing = tmp_path / "nueva.md"
+    code = main([*BASE, "--runner", "fake", "--fake-responses", str(resp), "--out", str(tmp_path / "inf"),
+                 "--ficha", str(missing), "--anclar"])
+    assert code == 3 and not missing.exists()

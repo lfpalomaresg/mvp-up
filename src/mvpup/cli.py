@@ -28,6 +28,7 @@ from .orchestrator import DEFAULT_AGENT_TIMEOUT
 from .parsing import FormatError, parse_grouped_output, parse_ligera_output
 from .prompts import build_task_prompt
 from .redaction import redact
+from .report import Report
 from .runners import AgentRunner
 from .selection import Plan, build_plan
 
@@ -213,9 +214,8 @@ def check_out_dir(out: Path) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    from .ficha import anchor_frontmatter
     from .orchestrator import run_pass
-    from .report import anchor_ficha, build_report, save_report
+    from .report import build_report, save_report
 
     intake = _intake(args)
     if args.model:
@@ -246,21 +246,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
     report = build_report(result, base_dir=out, dry_run=args.dry_run)
     path = save_report(report, out)
-    if intake.ficha_path and args.dry_run:
-        print(f"DRY-RUN: la ficha {intake.ficha_path} no se toca (datos sintéticos).", file=sys.stderr)
-    elif intake.ficha_path:
-        ficha = Path(intake.ficha_path)
-        if anchor_frontmatter(ficha, report.date, report.global_score, path, product=intake.product):
-            print(f"Ficha {ficha}: frontmatter actualizado (mvpup_date, mvpup_score, mvpup_report)")
-        else:
-            print(f"Ficha {ficha}: frontmatter ya anclado a este informe, sin cambios")
-        if args.anclar:
-            written = anchor_ficha(ficha, path, report.global_score, report.date,
-                                   product=intake.product, repo=intake.repo_path)
-            if written:
-                print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
-            else:
-                print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
@@ -268,7 +253,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"HTML: {write_html(path)}")
     if not result.results and result.ligera is None:
         print("⚠️  No se evaluó ninguna dimensión: revisa el log de la pasada.", file=sys.stderr)
+        if intake.ficha_path:
+            print(f"La ficha {intake.ficha_path} no se ancla a una pasada vacía.", file=sys.stderr)
         return 3
+    if intake.ficha_path and args.dry_run:
+        print(f"DRY-RUN: la ficha {intake.ficha_path} no se toca (datos sintéticos).", file=sys.stderr)
+    elif intake.ficha_path:
+        _anchor(Path(intake.ficha_path), intake, report, path, block=args.anclar)
     if report.global_score is not None:
         print(f"Score global: {report.global_score:.1f}/10".replace(".", ","))
     if report.top:
@@ -276,6 +267,23 @@ def cmd_run(args: argparse.Namespace) -> int:
         for n, item in enumerate(report.top, 1):
             print(f"  {n}. {item}")
     return 0
+
+
+def _anchor(ficha: Path, intake: Intake, report: Report, path: Path, block: bool) -> None:
+    """Ancla el informe en la ficha: frontmatter siempre; bloque «LEER AL RETOMAR» solo con --anclar."""
+    from .ficha import anchor_frontmatter
+    from .report import anchor_ficha
+
+    if anchor_frontmatter(ficha, report.date, report.global_score, path, product=intake.product):
+        print(f"Ficha {ficha}: frontmatter actualizado (mvpup_date, mvpup_score, mvpup_report)")
+    else:
+        print(f"Ficha {ficha}: frontmatter ya anclado a este informe, sin cambios")
+    if not block:
+        return
+    if anchor_ficha(ficha, path, report.global_score, report.date, product=intake.product, repo=intake.repo_path):
+        print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
+    else:
+        print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
