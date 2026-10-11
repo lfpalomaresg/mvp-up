@@ -58,7 +58,10 @@ GROUP_SEPARATOR = "# Dimensión: "
 # Lo que se ACEPTA al leer: también sin tilde, en mayúsculas o con espacios de más.
 _SEPARATOR_RE = re.compile(r"^#\s*dimensi[oó]n\s*:\s*(?P<ident>.+?)\s*$", re.IGNORECASE)
 
-_SCORE_NUM = r"(\d+(?:[.,]\d+)?)\s*/\s*10"
+# El signo se admite solo para poder decir «fuera de rango» en vez de «header ausente».
+_SCORE_NUM = r"(-?\d+(?:[.,]\d+)?)\s*/\s*10"
+# Un separador agrupado escrito como `## Dimensión:` (nivel equivocado): se explica, no se adivina.
+_H2_SEPARATOR_RE = re.compile(r"^##\s*dimensi[oó]n\s*:", re.IGNORECASE)
 _PAREN_TAIL_RE = re.compile(r"\s*\([^()]*\)$")
 _FINDING_RE = re.compile(
     # Nivel: la sigla de la plantilla (A/M/B) o la palabra completa (Alto/Medio/Bajo).
@@ -199,8 +202,32 @@ def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool)
     return findings
 
 
-def _require(sections: dict[str, list[str]], template: Template) -> None:
-    problems = [f"falta el header '{h}'" for k, h in template if k not in sections]
+def _stem(line: str) -> str:
+    """Primera palabra de una línea `##` sin tildes ni signos: lo que identifica la sección."""
+    words = re.findall(r"[a-z0-9]+", _fold(line[2:]))
+    return words[0] if words else ""
+
+
+def _unmatched_headers(text: str, template: Template) -> list[str]:
+    """Líneas `##` del texto que no son ningún header exacto de la plantilla."""
+    return [
+        ln.strip()
+        for ln in _lines(text)
+        if re.match(r"^##(?!#)", ln.strip())
+        and not any(_match_header(ln.strip(), h) for _, h in template)
+    ]
+
+
+def _require(sections: dict[str, list[str]], template: Template, text: str) -> None:
+    """Falla si falta algún header; si hay una línea parecida, la cita para que el reintento sea útil."""
+    unmatched = _unmatched_headers(text, template)
+    problems: list[str] = []
+    for key, header in template:
+        if key in sections:
+            continue
+        near = next((ln for ln in unmatched if _stem(ln) == _stem(header)), None)
+        detail = f" (hay una línea parecida que no es exacta: '{near}')" if near else ""
+        problems.append(f"falta el header '{header}'{detail}")
     if problems:
         raise FormatError(problems)
 
@@ -212,7 +239,7 @@ def _count_finding_lines(lines: list[str]) -> int:
 def parse_agent_output(text: str) -> DimensionResult:
     """Parsea la salida de un agente con la plantilla completa (express/full)."""
     sections = _sections(text, FULL_TEMPLATE)
-    _require(sections, FULL_TEMPLATE)
+    _require(sections, FULL_TEMPLATE, text)
     score = _parse_score(sections["score"][0], FULL_TEMPLATE[0][1])
     n = _count_finding_lines(sections["findings"])
     if n > MAX_FINDINGS:
@@ -232,7 +259,7 @@ def parse_agent_output(text: str) -> DimensionResult:
 def parse_ligera_output(text: str) -> LigeraResult:
     """Parsea la salida del agente único del modo ligera."""
     sections = _sections(text, LIGERA_TEMPLATE)
-    _require(sections, LIGERA_TEMPLATE)
+    _require(sections, LIGERA_TEMPLATE, text)
     score = _parse_score(sections["score"][0], LIGERA_TEMPLATE[0][1])
     n = _count_finding_lines(sections["findings"])
     if not 3 <= n <= 5:
@@ -316,6 +343,10 @@ def parse_grouped_partial(
         except FormatError as exc:
             return {}, {dims[0]: exc.problems}, []
     blocks, duplicated, structural = _split_grouped(text, dims)
+    if not blocks and any(_H2_SEPARATOR_RE.match(ln.strip()) for ln in _lines(text)):
+        structural.append(
+            f"los separadores de bloque van en primer nivel: '{GROUP_SEPARATOR}<id>', no '## Dimensión:'"
+        )
     results: dict[Dimension, DimensionResult] = {}
     problems: dict[Dimension, list[str]] = {}
     for dim in dims:

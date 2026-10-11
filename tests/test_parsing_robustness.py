@@ -78,10 +78,31 @@ def test_findings_without_any_evidence_fail_closed_instead_of_an_empty_dimension
 
 @pytest.mark.parametrize("bad, fragment", [
     ("## Score: 11/10 (rúbrica al pie)", "fuera de rango"),
+    ("## Score: -2/10 (rúbrica al pie)", "fuera de rango"),
     ("## Score: 10,5/10", "fuera de rango"),
+    ("## Score: ?/10 (rúbrica al pie)", "## Score: ?/10"),
+    ("## Score: 7/5", "## Score: 7/5"),
+    ("## Score: alto", "## Score: alto"),
     ("## Puntuación: 7/10", "Score"),
 ])
 def test_bad_score_messages_are_explicit(bad, fragment):
     with pytest.raises(FormatError) as exc:
         parse_agent_output(VALID_OUTPUT.replace("## Score: 6/10 (rúbrica al pie)", bad))
     assert any(fragment in p for p in exc.value.problems), exc.value.problems
+
+
+def test_malformed_header_message_quotes_the_near_miss():
+    text = VALID_OUTPUT.replace("## Riesgos si no se actúa", "## Riesgos si no actúas")
+    with pytest.raises(FormatError) as exc:
+        parse_agent_output(text)
+    assert any("## Riesgos si no actúas" in p and "Riesgos si no se actúa" in p for p in exc.value.problems)
+
+
+# --- agrupado: separador en nivel equivocado ---
+
+def test_grouped_output_with_h2_separators_explains_both_missing_blocks():
+    text = f"## Dimensión: comercial\n{VALID_OUTPUT}\n## Dimensión: marketing\n{VALID_OUTPUT}"
+    with pytest.raises(FormatError) as exc:
+        parse_grouped_output(text, (D.COMERCIAL, D.MARKETING))
+    joined = " ".join(exc.value.problems)
+    assert "comercial" in joined and "marketing" in joined and GROUP_SEPARATOR.strip() in joined
