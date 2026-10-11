@@ -225,6 +225,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise CliError("--anclar requiere --ficha <ruta de la ficha del producto>")
     if args.dry_run and (args.runner == "fake" or args.fake_responses):
         raise CliError("--dry-run ya simula los agentes: no se combina con --runner fake/--fake-responses")
+    if args.fake_responses and args.runner != "fake":
+        # Sin esto el fichero se ignoraba y la pasada salía con agentes REALES (y coste).
+        raise CliError("--fake-responses solo tiene sentido con --runner fake (¿querías simular la pasada?)")
     if args.dry_run and args.anclar:
         raise CliError("--anclar no se combina con --dry-run: un informe sintético no se ancla en una ficha real")
     out = Path(args.out or os.environ.get(REPORTS_ENV) or DEFAULT_REPORTS_DIR)
