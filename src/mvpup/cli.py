@@ -213,6 +213,7 @@ def check_out_dir(out: Path) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    from .ficha import anchor_frontmatter
     from .orchestrator import run_pass
     from .report import anchor_ficha, build_report, save_report
 
@@ -242,14 +243,21 @@ def cmd_run(args: argparse.Namespace) -> int:
     result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
     report = build_report(result, base_dir=out, dry_run=args.dry_run)
     path = save_report(report, out)
-    if args.anclar and intake.ficha_path:  # la ficha ya se exigió arriba; aquí solo se estrecha el tipo
+    if intake.ficha_path and args.dry_run:
+        print(f"DRY-RUN: la ficha {intake.ficha_path} no se toca (datos sintéticos).", file=sys.stderr)
+    elif intake.ficha_path:
         ficha = Path(intake.ficha_path)
-        written = anchor_ficha(ficha, path, report.global_score, report.date,
-                               product=intake.product, repo=intake.repo_path)
-        if written:
-            print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
+        if anchor_frontmatter(ficha, report.date, report.global_score, path, product=intake.product):
+            print(f"Ficha {ficha}: frontmatter actualizado (mvpup_date, mvpup_score, mvpup_report)")
         else:
-            print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
+            print(f"Ficha {ficha}: frontmatter ya anclado a este informe, sin cambios")
+        if args.anclar:
+            written = anchor_ficha(ficha, path, report.global_score, report.date,
+                                   product=intake.product, repo=intake.repo_path)
+            if written:
+                print(f"Anclaje «LEER AL RETOMAR» añadido a {ficha}")
+            else:
+                print(f"La ficha {ficha} ya tenía el anclaje de este informe: sin cambios")
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
