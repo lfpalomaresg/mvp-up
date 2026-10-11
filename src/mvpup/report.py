@@ -172,7 +172,9 @@ def _scores_table(report: Report) -> list[str]:
         delta = report.deltas.get(dim, "—")
         if dim in pr.results:
             s = pr.results[dim].score
-            rows.append(f"| {dim.label} | {fmt_score(s)}/10 | {delta} | {status_icon(s)} |")
+            # El semáforo se calcula sobre el score TAL COMO SE MUESTRA (1 decimal): un 6,96
+            # se imprime «7,0» y debe ser 🟢, no 🟡, o la leyenda miente.
+            rows.append(f"| {dim.label} | {fmt_score(s)}/10 | {delta} | {status_icon(round(s, 1))} |")
         elif dim in pr.unevaluated:
             rows.append(f"| {dim.label} | sin evaluar | {delta} | ⚪ |")
         elif dim in pr.not_applicable:

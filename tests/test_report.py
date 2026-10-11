@@ -154,3 +154,16 @@ def test_ligera_report_lists_findings_discarded_for_lack_of_evidence():
     md = render_markdown(build_report(result, today=TODAY))
     assert "H2 descartado: sin evidencia" in md
     assert any("ligera: aviso: H2 descartado" in ln for ln in result.log)
+
+
+# --- loop 5: el semáforo debe coincidir con el score que se muestra ---
+
+def test_status_icon_matches_the_displayed_rounded_score():
+    intake = Intake(product="Producto Demo", stage=Stage.MVP, objective=Objective.INGRESOS)
+    grouped = "\n".join(f"{GROUP_SEPARATOR}{d}\n{VALID_OUTPUT}" for d in ("comercial", "marketing"))
+    runner = FakeRunner({"tecnica": VALID_OUTPUT.replace("6/10", "6,96/10"),
+                         "producto_ux": VALID_OUTPUT.replace("6/10", "4,97/10"),
+                         "comercial+marketing": grouped})
+    md = render_markdown(build_report(run_pass(intake, runner), today=TODAY))
+    assert "| Técnica | 7,0/10 | — | 🟢 |" in md
+    assert "| Producto / UX | 5,0/10 | — | 🟡 |" in md
