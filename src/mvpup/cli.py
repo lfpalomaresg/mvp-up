@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TextIO
 
 from .config import ModelPolicyError, check_model
 from .dimensions import Dimension, Mode, Objective, Stage
@@ -24,7 +25,8 @@ from .intake import Intake, IntakeError
 from .parsing import FormatError, parse_grouped_output, parse_ligera_output
 from .prompts import build_task_prompt
 from .redaction import redact
-from .selection import build_plan
+from .runners import AgentRunner
+from .selection import Plan, build_plan
 
 REPORTS_ENV = "MVPUP_REPORTS_DIR"
 DEFAULT_REPORTS_DIR = "informes"
@@ -106,27 +108,31 @@ def _intake(args: argparse.Namespace) -> Intake:
     )
 
 
+def _print_plan(intake: Intake, plan: Plan, file: TextIO) -> None:
+    print(f"Producto: {intake.product} · etapa {intake.stage.value} · objetivo {intake.objective.value}", file=file)
+    print(f"Modo: {intake.mode.value} · coste orientativo {cost_hint(intake.mode, len(plan.tasks))}", file=file)
+    for key, model in critical_models(intake).items():
+        print(f"Decisión crítica: el agente {key} usará {model}", file=file)
+    print("Dimensiones: " + ", ".join(d.label for d in plan.selected), file=file)
+    if plan.not_applicable:
+        print("N/A: " + ", ".join(d.label for d in plan.not_applicable), file=file)
+    for n, batch in enumerate(plan.batches, 1):
+        print(f"Lote {n}: " + " · ".join(t.key for t in batch), file=file)
+    for w in plan.warnings:
+        print(f"⚠️  {w}", file=file)
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     intake = _intake(args)
     plan = build_plan(intake)
-    print(f"Producto: {intake.product} · etapa {intake.stage.value} · objetivo {intake.objective.value}")
-    print(f"Modo: {intake.mode.value} · coste orientativo {cost_hint(intake.mode, len(plan.tasks))}")
-    for key, model in critical_models(intake).items():
-        print(f"Decisión crítica: el agente {key} usará {model}")
-    print("Dimensiones: " + ", ".join(d.label for d in plan.selected))
-    if plan.not_applicable:
-        print("N/A: " + ", ".join(d.label for d in plan.not_applicable))
-    for n, batch in enumerate(plan.batches, 1):
-        print(f"Lote {n}: " + " · ".join(t.key for t in batch))
-    for w in plan.warnings:
-        print(f"⚠️  {w}")
+    _print_plan(intake, plan, sys.stdout)
     if args.show_prompts:
         for task in plan.tasks:
             print(f"\n===== PROMPT {task.key} =====\n{build_task_prompt(task, intake)}")
     return 0
 
 
-def _runner(args: argparse.Namespace, intake: Intake):
+def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
     if args.runner == "fake":
         from .runners import FakeRunner
 
@@ -194,16 +200,28 @@ def cmd_run(args: argparse.Namespace) -> int:
     intake = _intake(args)
     if args.model:
         check_model(args.model)  # la política de modelos va antes que cualquier otra cosa
+    # Errores de uso: se detectan ANTES de lanzar (y pagar) la pasada.
     if args.anclar and not intake.ficha_path:
-        # Error de uso: se detecta ANTES de lanzar (y pagar) la pasada.
         raise CliError("--anclar requiere --ficha <ruta de la ficha del producto>")
+    if args.dry_run and (args.runner == "fake" or args.fake_responses):
+        raise CliError("--dry-run ya simula los agentes: no se combina con --runner fake/--fake-responses")
+    if args.dry_run and args.anclar:
+        raise CliError("--anclar no se combina con --dry-run: un informe sintético no se ancla en una ficha real")
     out = Path(args.out or os.environ.get(REPORTS_ENV) or DEFAULT_REPORTS_DIR)
     check_out_dir(out)
-    runner = _runner(args, intake)
     plan = build_plan(intake)
+    if args.dry_run:
+        from .dryrun import dry_run_responses
+        from .runners import FakeRunner
+
+        print("DRY-RUN: pasada simulada con datos sintéticos (sin red, sin API key, sin coste).", file=sys.stderr)
+        runner: AgentRunner = FakeRunner(dry_run_responses(plan, intake.mode))
+    else:
+        runner = _runner(args, intake)
+    _print_plan(intake, plan, sys.stderr)
     print(f"Lanzando pasada {intake.mode.value} ({cost_hint(intake.mode, len(plan.tasks))})…", file=sys.stderr)
     result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
-    report = build_report(result, base_dir=out)
+    report = build_report(result, base_dir=out, dry_run=args.dry_run)
     path = save_report(report, out)
     if args.anclar:
         written = anchor_ficha(Path(intake.ficha_path), path, report.global_score, report.date,
@@ -283,6 +301,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_intake_args(p_run)
     p_run.add_argument("--runner", choices=["anthropic", "fake"], default="anthropic")
     p_run.add_argument("--fake-responses", help="JSON {task_key: salida} para --runner fake")
+    p_run.add_argument("--dry-run", action="store_true",
+                       help="pasada completa con agentes simulados y datos sintéticos (sin red ni API key)")
     p_run.add_argument("--model", help="modelo de los agentes (por defecto claude-sonnet-5-5)")
     p_run.add_argument("--out", help=f"carpeta de informes (o ${REPORTS_ENV}; por defecto ./{DEFAULT_REPORTS_DIR})")
     p_run.add_argument("--timeout", type=float, default=900.0, help="segundos por intento de agente")

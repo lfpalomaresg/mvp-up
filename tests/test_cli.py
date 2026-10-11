@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 
@@ -178,3 +179,76 @@ def test_out_check_outside_repo_with_spanish_locale(tmp_path, monkeypatch):
     monkeypatch.setenv("LANG", "es_ES.UTF-8")
     monkeypatch.setenv("LC_ALL", "es_ES.UTF-8")
     cli.check_out_dir(tmp_path / "informes")  # tmp_path no es un repo: debe pasar
+
+
+# --- dry-run: pasada completa con datos sintéticos, sin red ni API key ---
+
+def _block_network(monkeypatch):
+    import socket
+
+    def no_socket(*a, **kw):
+        raise AssertionError("el dry-run no debe abrir conexiones de red")
+
+    monkeypatch.setattr(socket, "socket", no_socket)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
+def _never(*a, **kw):
+    raise AssertionError("el dry-run no debe construir ningún runner real")
+
+
+def test_dry_run_end_to_end_writes_a_complete_report(tmp_path, capsys, monkeypatch):
+    from mvpup import cli
+    from support import template_headers
+
+    _block_network(monkeypatch)
+    monkeypatch.setattr(cli, "_runner", _never)
+    out = tmp_path / "informes"
+    assert main(["run", *BASE, "--dry-run", "--out", str(out)]) == 0
+    captured = capsys.readouterr()
+    assert "DRY-RUN" in captured.err and "Lote 1:" in captured.err
+    assert "Informe:" in captured.out and "Score global:" in captured.out and "TOP-5" in captured.out
+
+    paths = list((out / "producto-demo").glob("*-dry-run.md"))
+    assert len(paths) == 1 and not list((out / "producto-demo").glob("*-informe.md"))
+    md = paths[0].read_text(encoding="utf-8")
+    lines = [ln.strip() for ln in md.splitlines()]
+    positions = [lines.index(h) for h in template_headers()]
+    assert positions == sorted(positions)
+    assert "DRY-RUN" in md and "[sintético]" in md
+    # las cuatro dimensiones de la etapa mvp evaluadas, ninguna «sin evaluar»
+    for label in ("Técnica", "Producto / UX", "Comercial", "Marketing y hype"):
+        assert f"| {label} | " in md
+    assert "sin evaluar" not in md
+    # matriz con los cuatro cuadrantes poblados y un hallazgo estructural
+    for cell in ("⚡ QUICK WINS: —", "🎯 APUESTAS: —", "📋 Si sobra tiempo: —", "🗑️ Descartar: —"):
+        assert cell not in md
+    assert "Ninguno detectado" not in md and "bloquea:" in md
+    assert "Primera pasada" in md
+    assert re.search(r"^5\. ", md, re.MULTILINE)  # TOP-5 completo
+    data = json.loads(paths[0].with_suffix(".json").read_text(encoding="utf-8"))
+    assert data["dry_run"] is True and data["unevaluated"] == []
+
+
+@pytest.mark.parametrize("extra", [
+    ["--stage", "idea"], ["--stage", "produccion"], ["--stage", "facturando"],
+    ["--mode", "full", "--confirm-full"], ["--mode", "ligera"],
+    ["--no-software", "--no-customer-data", "--stage", "facturando"],
+])
+def test_dry_run_covers_every_stage_and_mode(tmp_path, capsys, monkeypatch, extra):
+    _block_network(monkeypatch)
+    args = ["run", "--product", "Demo", "--objective", "vendible", "--stage", "mvp", *extra]
+    assert main([*args, "--dry-run", "--out", str(tmp_path / "informes")]) == 0
+    md = next((tmp_path / "informes" / "demo").glob("*-dry-run.md")).read_text(encoding="utf-8")
+    assert "sin evaluar" not in md and "DRY-RUN" in md
+
+
+def test_dry_run_is_incompatible_with_fake_runner_and_anchor(tmp_path, capsys):
+    resp = _write_resp(tmp_path, {"*": VALID_OUTPUT})
+    assert main(["run", *BASE, "--dry-run", "--runner", "fake", "--fake-responses", resp,
+                 "--out", str(tmp_path / "i")]) == 2
+    assert "--dry-run" in capsys.readouterr().err
+    assert main(["run", *BASE, "--dry-run", "--anclar", "--ficha", str(tmp_path / "f.md"),
+                 "--out", str(tmp_path / "i")]) == 2
+    assert "--anclar" in capsys.readouterr().err
+    assert not (tmp_path / "f.md").exists() and not (tmp_path / "i").exists()
