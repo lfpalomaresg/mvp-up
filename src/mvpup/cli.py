@@ -357,6 +357,10 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:  # ficheros inexistentes/ilegibles, JSON inválido
         print(f"Error: {type(exc).__name__}: {redact(str(exc))}", file=sys.stderr)
         return 2
+    except KeyboardInterrupt:
+        # Convención POSIX: 128 + SIGINT. Sin traceback: el operador ya sabe que ha cortado.
+        print("Interrumpido por el usuario: la pasada se ha cancelado y no se ha guardado informe.", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":  # pragma: no cover

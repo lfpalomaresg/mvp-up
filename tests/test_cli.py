@@ -286,3 +286,17 @@ def test_fake_responses_with_non_text_value_is_a_usage_error(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "tecnica" in err and "Traceback" not in err
     assert not (tmp_path / "inf").exists()
+
+
+# --- loop 7: Ctrl-C durante la pasada sale limpio con código 130 ---
+
+def test_keyboard_interrupt_during_the_pass_exits_130_without_traceback(tmp_path, capsys, monkeypatch):
+    from mvpup import orchestrator
+
+    def interrupted(*a, **kw):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(orchestrator, "run_pass", interrupted)
+    assert main(["run", *BASE, "--dry-run", "--out", str(tmp_path / "inf")]) == 130
+    err = capsys.readouterr().err
+    assert "Interrumpido" in err and "Traceback" not in err

@@ -13,7 +13,7 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import TypeVar
+from typing import Generic, TypeVar, cast
 
 from .dimensions import MAX_PARALLEL_AGENTS, Dimension, Mode
 from .intake import Intake
@@ -67,6 +67,15 @@ def reinforce(prompt: str, problems: list[str]) -> str:
     )
 
 
+@dataclass
+class _Outcome(Generic[T]):
+    """Resultado de un hilo de agente: valor o excepción (la que sea) para re-lanzar fuera."""
+
+    value: T | None = None
+    error: BaseException | None = None
+    done: bool = False
+
+
 def _call_with_timeout(fn: Callable[[], T], timeout: float | None, slots: threading.Semaphore) -> T:
     """Ejecuta `fn` en un hilo daemon y abandona la espera al vencer `timeout`.
 
@@ -77,13 +86,14 @@ def _call_with_timeout(fn: Callable[[], T], timeout: float | None, slots: thread
     """
     if not slots.acquire(timeout=timeout):
         raise TimeoutError(f"sin hueco libre para el agente en {timeout:g}s (agentes colgados)")
-    box: dict[str, object] = {}
+    outcome: _Outcome[T] = _Outcome()
 
     def target() -> None:
         try:
-            box["value"] = fn()
+            outcome.value = fn()
+            outcome.done = True
         except BaseException as exc:  # noqa: BLE001 — se re-lanza en el hilo principal
-            box["error"] = exc
+            outcome.error = exc
         finally:
             slots.release()
 
@@ -92,9 +102,11 @@ def _call_with_timeout(fn: Callable[[], T], timeout: float | None, slots: thread
     thread.join(timeout)
     if thread.is_alive():
         raise TimeoutError(f"el agente no respondió en {timeout:g}s")
-    if "error" in box:
-        raise box["error"]  # type: ignore[misc]
-    return box["value"]  # type: ignore[return-value]
+    if outcome.error is not None:
+        raise outcome.error
+    if not outcome.done:  # pragma: no cover — el hilo terminó sin valor ni error: imposible salvo bug
+        raise RuntimeError("el agente terminó sin devolver resultado")
+    return cast(T, outcome.value)
 
 
 @dataclass(frozen=True)
