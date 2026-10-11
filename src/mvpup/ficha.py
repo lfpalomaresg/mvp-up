@@ -1,7 +1,13 @@
-"""Anclaje de la pasada en la ficha del producto (Fase 5.2) vía frontmatter.
+"""Anclaje de la pasada en la ficha del producto (Fase 5.2).
 
-`--ficha <ruta.md>` ancla la última pasada en el frontmatter YAML de la ficha con tres
-claves (`mvpup_date`, `mvpup_score`, `mvpup_report`) y NO reescribe nada más:
+Dos anclajes, los dos sin reescribir nada ajeno:
+
+1. `anchor_frontmatter` (siempre con `--ficha`): tres claves en el frontmatter YAML
+   (`mvpup_date`, `mvpup_score`, `mvpup_report`).
+2. `anchor_ficha` (opt-in con `--anclar`): el bloque visible «⚡ MVP-UP X/10 — LEER AL
+   RETOMAR» al final de la ficha, idempotente por informe.
+
+Reglas del frontmatter:
 
 - el cuerpo de la ficha se conserva byte a byte (saltos de línea CRLF/LF y BOM incluidos);
 - las demás claves del frontmatter se conservan tal cual (orden, espacios, comentarios);
@@ -18,6 +24,8 @@ from __future__ import annotations
 import re
 from datetime import date
 from pathlib import Path
+
+from .scoring import fmt_score
 
 FRONTMATTER_KEYS = ("mvpup_date", "mvpup_score", "mvpup_report")
 _KEY_RE = re.compile(r"^(" + "|".join(FRONTMATTER_KEYS) + r")\s*:")
@@ -102,3 +110,39 @@ def read_frontmatter(ficha: Path) -> dict[str, str]:
         if m and m.group(1) not in out:
             out[m.group(1)] = line[m.end():].strip()
     return out
+
+
+ANCHOR_TITLE = "## ⚡ MVP-UP {score}/10 ({date}) — LEER AL RETOMAR"
+
+
+def anchor_ficha(
+    ficha: Path,
+    report_path: Path,
+    score: float | None,
+    when: date,
+    product: str | None = None,
+    repo: str | None = None,
+) -> bool:
+    """Añade el bloque «salta al retomar» al final de la ficha (idempotente por informe).
+
+    Si la ficha no existe se crea la mínima (qué es / estado / repo / informe). Devuelve True
+    si escribió algo. Nunca reescribe contenido existente: solo añade al final, con el mismo
+    salto de línea que ya usa la ficha (CRLF o LF).
+    """
+    title = ANCHOR_TITLE.format(score=fmt_score(score, 1), date=when.isoformat())
+    pointer = f"Informe: `{report_path}`"
+    block_lines = ["", title, f"{pointer} — la próxima sesión sobre este producto arranca leyéndolo."]
+    if ficha.exists():
+        text = ficha.read_bytes().decode("utf-8")
+        if pointer in text:  # idempotente por INFORME, no por fecha/score
+            return False
+        newline = "\r\n" if "\r\n" in text else "\n"
+        body = text.rstrip("\r\n") + newline if text.strip() else ""
+        ficha.write_bytes((body + newline.join(block_lines) + newline).encode("utf-8"))
+        return True
+    ficha.parent.mkdir(parents=True, exist_ok=True)
+    name = product or ficha.stem
+    head = [f"# {name}", "", "- Qué es: N/D (completar)", "- Estado: auditado con MVP-UP",
+            f"- Repo: `{repo or 'N/D'}`", f"- Informe: `{report_path}`"]
+    ficha.write_text("\n".join(head + block_lines) + "\n", encoding="utf-8")
+    return True

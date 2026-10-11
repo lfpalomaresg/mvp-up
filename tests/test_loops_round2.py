@@ -94,3 +94,21 @@ def test_previous_global_score_in_evolution_uses_the_same_format_as_the_header()
     compare_with_previous(rep, {"schema": 1, "date": "2026-09-01", "objective": "ingresos", "global_score": 6.0,
                                 "scores": {"tecnica": 6}})
     assert "score global 6,0/10" in rep.evolution[0]
+
+
+# --- loop 6: anchor_ficha vivía en report.py y rompía los CRLF de la ficha ---
+
+def test_anchor_block_preserves_crlf_and_lives_in_ficha_module(tmp_path):
+    from datetime import date
+
+    from mvpup import report
+    from mvpup.ficha import anchor_ficha
+
+    assert not hasattr(report, "anchor_ficha")  # todo lo que toca la ficha está en ficha.py
+    ficha = tmp_path / "demo.md"
+    ficha.write_bytes(b"# Demo\r\n\r\nFicha ficticia.\r\n")
+    assert anchor_ficha(ficha, tmp_path / "2026-10-04-informe.md", 6.2, date(2026, 10, 4)) is True
+    raw = ficha.read_bytes()
+    assert raw.startswith(b"# Demo\r\n\r\nFicha ficticia.\r\n")
+    assert b"LEER AL RETOMAR" in raw and b"\n" not in raw.replace(b"\r\n", b"")
+    assert anchor_ficha(ficha, tmp_path / "2026-10-04-informe.md", 6.2, date(2026, 10, 4)) is False

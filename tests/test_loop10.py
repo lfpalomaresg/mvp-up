@@ -88,7 +88,7 @@ def test_cost_hint_scales_with_agents(capsys):
 
 # (2) anclaje «LEER AL RETOMAR» en la ficha (opt-in)
 def test_anchor_is_appended_once(tmp_path):
-    from mvpup.report import anchor_ficha
+    from mvpup.ficha import anchor_ficha
 
     ficha = tmp_path / "demo.md"
     ficha.write_text("# Demo\nFicha ficticia.\n", encoding="utf-8")
@@ -101,7 +101,7 @@ def test_anchor_is_appended_once(tmp_path):
 
 
 def test_anchor_creates_minimal_ficha_if_missing(tmp_path):
-    from mvpup.report import anchor_ficha
+    from mvpup.ficha import anchor_ficha
 
     ficha = tmp_path / "nueva.md"
     anchor_ficha(ficha, tmp_path / "x-informe.md", None, date(2026, 10, 4), product="Nueva Demo")
@@ -141,7 +141,7 @@ def test_anclar_without_ficha_fails_before_any_agent_runs(tmp_path):
 
 
 def test_minimal_ficha_includes_repo(tmp_path):
-    from mvpup.report import anchor_ficha
+    from mvpup.ficha import anchor_ficha
 
     ficha = tmp_path / "nueva.md"
     anchor_ficha(ficha, tmp_path / "x-informe.md", 5.0, date(2026, 10, 4), product="Demo",
@@ -171,7 +171,7 @@ def test_second_pass_same_day_gets_its_own_anchor(tmp_path, capsys):
 
 
 def test_same_report_anchor_is_idempotent_even_with_other_score(tmp_path):
-    from mvpup.report import anchor_ficha
+    from mvpup.ficha import anchor_ficha
 
     ficha = tmp_path / "demo.md"
     report = tmp_path / "2026-10-04-informe.md"

@@ -272,8 +272,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def _anchor(ficha: Path, intake: Intake, report: Report, path: Path, block: bool) -> None:
     """Ancla el informe en la ficha: frontmatter siempre; bloque «LEER AL RETOMAR» solo con --anclar."""
-    from .ficha import anchor_frontmatter
-    from .report import anchor_ficha
+    from .ficha import anchor_ficha, anchor_frontmatter
 
     if anchor_frontmatter(ficha, report.date, report.global_score, path, product=intake.product):
         print(f"Ficha {ficha}: frontmatter actualizado (mvpup_date, mvpup_score, mvpup_report)")
