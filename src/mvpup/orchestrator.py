@@ -106,13 +106,18 @@ class _Ctx:
 
 def _call(ctx: _Ctx, prompt: str, key: str, log: list[str], attempt: int) -> str | None:
     try:
-        return _call_with_timeout(
+        text = _call_with_timeout(
             lambda: ctx.runner.run(prompt, task_key=key), ctx.timeout, ctx.slots
         )
     except Exception as exc:  # noqa: BLE001 — un agente caído no tumba la pasada
         # El texto de una excepción puede llevar URLs con credenciales o cabeceras: se redacta.
         log.append(redact(f"{key}: el agente falló en intento {attempt}: {type(exc).__name__}: {exc}"))
         return None
+    if not isinstance(text, str):
+        # Un runner mal configurado (p.ej. --fake-responses con un número) no debe tumbar la pasada.
+        log.append(f"{key}: el agente no devolvió texto en intento {attempt} ({type(text).__name__})")
+        return None
+    return text
 
 
 def _attempt(ctx: _Ctx, prompt: str, key: str, parse: Callable[[str], T], log: list[str]) -> T | None:

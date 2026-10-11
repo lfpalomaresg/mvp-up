@@ -106,3 +106,23 @@ def test_grouped_output_with_h2_separators_explains_both_missing_blocks():
         parse_grouped_output(text, (D.COMERCIAL, D.MARKETING))
     joined = " ".join(exc.value.problems)
     assert "comercial" in joined and "marketing" in joined and GROUP_SEPARATOR.strip() in joined
+
+
+# --- orquestador: respuestas no textuales y avisos visibles ---
+
+def intake(**kw):
+    base = dict(product="Producto Demo", stage=Stage.MVP, objective=Objective.INGRESOS)
+    base.update(kw)
+    return Intake(**base)
+
+
+def grouped_valid():
+    return "\n".join(f"{GROUP_SEPARATOR}{d}\n{VALID_OUTPUT}" for d in ("comercial", "marketing"))
+
+
+def test_non_text_agent_response_is_a_logged_failure_not_a_crash():
+    runner = FakeRunner({"tecnica": lambda p: None, "producto_ux": lambda p: {"score": 6},
+                         "comercial+marketing": grouped_valid()})
+    result = run_pass(intake(), runner)
+    assert set(result.unevaluated) == {D.TECNICA, D.PRODUCTO_UX}
+    assert any("tecnica" in ln and "no devolvió texto" in ln for ln in result.log)
