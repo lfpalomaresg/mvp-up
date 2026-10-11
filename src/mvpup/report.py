@@ -139,7 +139,13 @@ def build_report(
                 f"- ⚠️ Informe anterior ilegible ({last.name}: {exc}); sin comparación."
             ]
         else:
-            compare_with_previous(report, data)
+            try:
+                compare_with_previous(report, data)
+            except Exception as exc:  # noqa: BLE001 — la comparación es accesoria: el informe, no
+                report.evolution = [
+                    f"- ⚠️ La comparación automática con {last.name} falló "
+                    f"({type(exc).__name__}: {exc}); compararla a mano."
+                ]
     return report
 
 
