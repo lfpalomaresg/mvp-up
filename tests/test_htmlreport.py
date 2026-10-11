@@ -155,3 +155,34 @@ def test_run_with_html_flag_writes_the_html_twin(tmp_path, capsys):
     html_path = next((out / "producto-demo").glob("*-dry-run.html"))
     assert "HTML:" in capsys.readouterr().out
     ET.fromstring(html_path.read_text(encoding="utf-8"))
+
+
+def test_links_with_script_or_data_schemes_are_not_rendered_as_links():
+    # El Markdown lleva texto del modelo (no confiable): un «enlace» javascript:/data: no puede
+    # acabar como <a href> en un informe que se vende como «sin JS».
+    md = ("- [a](javascript:alert(1)) [b](JavaScript:x) [c](data:text/html,x) [d](vbscript:x) "
+          "[e](https://e.es/?a=1&b=2) [f](mailto:x@y.es) [g](../x.md) [h](HTTP://E.ES)\n")
+    html = render_html(md)
+    root = ET.fromstring(html)
+    hrefs = [a.get("href") for a in root.iter("a")]
+    assert hrefs == ["https://e.es/?a=1&b=2", "mailto:x@y.es", "../x.md", "HTTP://E.ES"]
+    assert not any(h.lower().startswith(("javascript:", "data:", "vbscript:")) for h in hrefs)
+    text = "".join(root.find("body//li").itertext())
+    assert "[a](javascript:alert(1))" in text and "[c](data:text/html,x)" in text  # queda como texto, legible
+
+
+def test_control_characters_cannot_smuggle_a_javascript_link_nor_break_the_xml():
+    # Los navegadores descartan los controles C0 iniciales de una URL: «\x01javascript:» ES javascript:.
+    # Y U+0001 no es un carácter XML válido: el informe dejaría de estar bien formado.
+    md = "- [a](\x01javascript:alert(1)) [b](java\x00script:x) [c](\x7fdata:x) texto\x02raro [d](https://e.es)\n"
+    html = render_html(md)
+    root = ET.fromstring(html)
+    hrefs = [a.get("href") for a in root.iter("a")]
+    assert hrefs == ["https://e.es"]
+    assert "textoraro" in "".join(root.find("body//li").itertext())
+
+
+def test_non_xml_characters_are_dropped_so_the_report_stays_well_formed():
+    html = render_html("# T￾\n\n- texto￿ raro\n")
+    root = ET.fromstring(html)
+    assert root.find("body//h1").text == "T" and "texto raro" in "".join(root.find("body//li").itertext())

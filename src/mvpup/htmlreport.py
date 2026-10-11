@@ -3,7 +3,8 @@
 Sin CDN, sin JavaScript, sin imágenes ni fuentes externas: un único fichero que se
 abre en cualquier navegador (y se imprime) aunque no haya red. Convierte solo el
 subconjunto de Markdown que generan `report.py`, `compare.py` y `portfolio.py`:
-headers, párrafos, negrita, código en línea, enlaces, listas anidadas (con casillas
+headers, párrafos, negrita, código en línea, enlaces (solo http(s), mailto o relativos:
+el texto viene del modelo), listas anidadas (con casillas
 `- [ ]`), listas numeradas, citas y tablas.
 
 La matriz impacto × esfuerzo sale como tabla accesible: `<caption>`, cabeceras de
@@ -27,6 +28,13 @@ _SEPARATOR_CELL_RE = re.compile(r"^:?-{3,}:?$")
 _CODE_RE = re.compile(r"`([^`]+)`")
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+# Esquemas de enlace admitidos: http(s), mailto o ruta relativa (sin esquema). El Markdown lleva texto
+# del modelo (no confiable): un «enlace» javascript:/data:/vbscript: queda como texto, nunca como <a>.
+_SAFE_HREF_RE = re.compile(r"^(?:https?:|mailto:|(?![a-zA-Z][a-zA-Z0-9+.-]*:))", re.IGNORECASE)
+# Controles C0/DEL/C1 (salvo tabulador): no son XML válido y un navegador los descarta al inicio de una
+# URL («\x01javascript:» ES javascript:). Se eliminan de todo el texto antes de escapar.
+# También los no-caracteres U+FFFE/U+FFFF y los surrogates sueltos: no son XML válido.
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff\ud800-\udfff]")
 _CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
 _CELL_BREAK = "<br>"  # separador de hallazgos dentro de una celda (report._cell)
 
@@ -56,12 +64,19 @@ label input[type="checkbox"] { margin-right: .4rem; }
 """
 
 
+def _link(m: re.Match[str]) -> str:
+    text, url = m.group(1), m.group(2)  # ya escapados: «"» y «&» no pueden romper el atributo
+    if _SAFE_HREF_RE.match(url):
+        return f'<a href="{url}">{text}</a>'
+    return m.group(0)  # esquema no admitido (javascript:, data:, …): se deja tal cual, legible
+
+
 def _inline(text: str) -> str:
-    """Escapa el texto y aplica negrita, código en línea y enlaces."""
-    escaped = html.escape(text, quote=True)
+    """Quita controles, escapa y aplica negrita, código en línea y enlaces (solo http(s)/mailto/relativos)."""
+    escaped = html.escape(_CONTROL_RE.sub("", text), quote=True)
     escaped = _CODE_RE.sub(lambda m: f"<code>{m.group(1)}</code>", escaped)
     escaped = _BOLD_RE.sub(lambda m: f"<strong>{m.group(1)}</strong>", escaped)
-    return _LINK_RE.sub(lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', escaped)
+    return _LINK_RE.sub(_link, escaped)
 
 
 def _split_cells(line: str) -> list[str]:
@@ -251,6 +266,6 @@ def render_html(markdown: str, title: str | None = None) -> str:
         "<!DOCTYPE html>\n"
         '<html lang="es">\n<head>\n<meta charset="utf-8"/>\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1"/>\n'
-        f"<title>{html.escape(page_title, quote=True)}</title>\n"
+        f"<title>{html.escape(_CONTROL_RE.sub('', page_title), quote=True)}</title>\n"
         f"<style>\n{CSS}</style>\n</head>\n<body>\n<main>\n{body}\n</main>\n</body>\n</html>\n"
     )
