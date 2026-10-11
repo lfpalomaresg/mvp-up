@@ -1,10 +1,11 @@
-"""CLI: `mvpup plan | run | validate | cartera`.
+"""CLI: `mvpup plan | run | validate | cartera | compare`.
 
 - plan: muestra la selección, los agentes, avisos y el coste orientativo (sin red).
 - run: ejecuta la pasada y guarda el informe versionado (MD + JSON).
 - validate: valida contra la plantilla la salida de un agente lanzado a mano
   (p.ej. desde subagentes de Claude Code).
 - cartera: síntesis transversal de los últimos informes de 2+ productos.
+- compare: deltas por dimensión y acciones cerradas/nuevas entre dos informes guardados.
 
 El disparo es siempre manual; el modo full exige `--confirm-full`.
 """
@@ -17,7 +18,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from .config import ModelPolicyError, check_model
 from .dimensions import Dimension, Mode, Objective, Stage
@@ -308,6 +309,33 @@ def cmd_cartera(args: argparse.Namespace) -> int:
     return 0
 
 
+def load_report_json(path: Path) -> dict[str, Any]:
+    """JSON gemelo de un informe guardado (acepta la ruta del `.md` o del `.json`)."""
+    json_path = path.with_suffix(".json") if path.suffix.lower() == ".md" else path
+    if path.suffix.lower() == ".md" and not json_path.exists():
+        raise CliError(f"el informe {path} no tiene JSON gemelo ({json_path.name}): no se puede comparar")
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("scores"), dict):
+        raise CliError(f"{json_path} no parece el JSON de un informe MVP-UP (falta `scores`)")
+    return data
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    from .compare import diff_reports, render_diff
+
+    previous = load_report_json(Path(args.previous))
+    current = load_report_json(Path(args.current))
+    md = render_diff(diff_reports(previous, current))
+    if args.save:
+        target = Path(args.save)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(md, encoding="utf-8")
+        print(f"Comparación guardada: {target}")
+    else:
+        print(md, end="")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mvpup", description="Orquestador MVP-UP")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -341,6 +369,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_cart.add_argument("--out", help=f"carpeta de informes (o ${REPORTS_ENV})")
     p_cart.add_argument("--save", action="store_true", help="guarda <out>/_cartera.md")
     p_cart.set_defaults(func=cmd_cartera)
+
+    p_cmp = sub.add_parser("compare", help="deltas entre dos informes ya guardados (anterior → nuevo)")
+    p_cmp.add_argument("previous", help="informe anterior (.md con JSON gemelo, o el .json)")
+    p_cmp.add_argument("current", help="informe nuevo (.md con JSON gemelo, o el .json)")
+    p_cmp.add_argument("--save", help="guarda el resumen Markdown en esta ruta en vez de imprimirlo")
+    p_cmp.set_defaults(func=cmd_compare)
     return parser
 
 
