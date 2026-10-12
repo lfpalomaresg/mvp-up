@@ -20,6 +20,9 @@ class Intake:
     repo_path: str | None = None
     url: str | None = None
     context: str = ""
+    # Texto libre del operador (resultados de tests, URL de producción, métricas…): se adjunta a
+    # todos los agentes como dato declarado y NO verificado, ya redactado (ver prompts.py).
+    operator_context: str = ""
     ficha_path: str | None = None
     wip_context: str = ""
     in_wip_lanes: bool = True

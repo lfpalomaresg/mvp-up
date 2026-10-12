@@ -26,7 +26,7 @@ from .parsing import (
 )
 from .prompts import build_task_prompt
 from .redaction import redact
-from .runners import AgentRunner
+from .runners import AgentRunner, AgentUsage
 from .selection import AgentTask, Plan, build_plan
 
 T = TypeVar("T")
@@ -44,6 +44,8 @@ class PassResult:
     unevaluated: tuple[Dimension, ...] = ()
     ligera: LigeraResult | None = None
     log: list[str] = field(default_factory=list)
+    # Consumo por agente (task_key) si el runner lo informa; vacío con FakeRunner/dry-run.
+    usage: dict[str, AgentUsage] = field(default_factory=dict)
 
     @property
     def not_applicable(self) -> tuple[Dimension, ...]:
@@ -172,6 +174,7 @@ def _run_task(task: AgentTask, intake: Intake, ctx: _Ctx) -> tuple[AgentTask, di
                     results[dim] = parsed[dim]
                     # Lo descartado por falta de evidencia se ve: nunca un informe «limpio» en silencio.
                     log.extend(f"{task.key}: aviso en {dim.value}: {w}" for w in parsed[dim].warnings)
+                    log.extend(f"{task.key}: nota de formato en {dim.value}: {n}" for n in parsed[dim].notes)
             problems = [p for d in pending if d in by_dim for p in by_dim[d]]
             if problems:
                 log.append(f"{task.key}: formato inválido en intento {attempt}: {'; '.join(problems)}")
@@ -183,6 +186,19 @@ def _run_task(task: AgentTask, intake: Intake, ctx: _Ctx) -> tuple[AgentTask, di
     missing = [d.value for d in task.dimensions if d not in results]
     log.append(f"{task.key}: sin evaluar tras {MAX_ATTEMPTS} intentos: {', '.join(missing)}")
     return task, results, log
+
+
+def _collect_usage(runner: AgentRunner, log: list[str]) -> dict[str, AgentUsage]:
+    """Consumo que informa el runner (opcional). Un contador roto no tumba una pasada ya pagada."""
+    report = getattr(runner, "usage", None)
+    if not callable(report):
+        return {}
+    try:
+        usage = report()
+        return {str(k): v for k, v in usage.items() if isinstance(v, AgentUsage)}
+    except Exception as exc:  # noqa: BLE001 — el consumo es accesorio: el informe, no
+        log.append(redact(f"consumo no disponible: {type(exc).__name__}: {exc}"))
+        return {}
 
 
 def run_pass(
@@ -200,6 +216,7 @@ def run_pass(
         if plan.tasks:
             prompt = build_task_prompt(plan.tasks[0], intake)
             result.ligera = _attempt(ctx, prompt, LIGERA_TASK_KEY, parse_ligera_output, result.log)
+        result.usage = _collect_usage(runner, result.log)
         return result
 
     unevaluated: list[Dimension] = []
@@ -212,4 +229,5 @@ def run_pass(
             unevaluated.extend(d for d in task.dimensions if d not in parsed)
     order = list(Dimension)
     result.unevaluated = tuple(sorted(unevaluated, key=order.index))
+    result.usage = _collect_usage(runner, result.log)
     return result

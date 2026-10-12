@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -19,6 +20,7 @@ def pass_with(tecnica="6/10", objective=Objective.INGRESOS, stage=Stage.MVP, tec
     tec = VALID_OUTPUT.replace("6/10", tecnica)
     if tecnica_text:
         tec = tec.replace("Sin tests automatizados", tecnica_text)
+        tec = tec.replace("Añadir pytest con un test de humo", f"Resolver: {tecnica_text}")
     grouped = "\n".join(f"{GROUP_SEPARATOR}{d}\n{VALID_OUTPUT}" for d in ("comercial", "marketing"))
     runner = FakeRunner({"tecnica": tec, "producto_ux": VALID_OUTPUT, "comercial+marketing": grouped})
     return run_pass(intake, runner)
@@ -55,7 +57,18 @@ def test_actions_no_longer_found_are_counted(tmp_path):
     )
     joined = "\n".join(report.evolution)
     assert "ya no aparecen" in joined
-    assert "Sin tests automatizados" in joined
+    assert "Añadir pytest con un test de humo" in joined  # las acciones anteriores se listan por su acción
+
+
+def test_same_action_for_a_reworded_finding_is_still_open(tmp_path):
+    """El agente redacta distinto el hallazgo pero propone la MISMA acción: no está «hecha»."""
+    saved(tmp_path, date(2026, 9, 1))
+    current = pass_with(tecnica_text="Cobertura de tests insuficiente")
+    finding = current.results[D.TECNICA].findings[0]
+    current.results[D.TECNICA].findings[0] = replace(finding, action="Añadir pytest con un test de humo")
+    joined = "\n".join(build_report(current, today=date(2026, 10, 4), base_dir=tmp_path).evolution)
+    assert "⏳ sigue abierta: Añadir pytest con un test de humo" in joined
+    assert "✅? Añadir pytest con un test de humo" not in joined
 
 
 def test_objective_change_marks_deltas_not_comparable_and_recomputes(tmp_path):

@@ -3,6 +3,65 @@
 Formato por sesión: **Hecho · Pendiente · Decidido**. Todos los datos de tests y ejemplos son
 sintéticos. Las notas de los loops 0-10 están en [`LOOPS.md`](LOOPS.md).
 
+## 2026-10-12 — Correcciones tras la primera pasada real (commit con override del operador: gate sin APTO)
+
+**Rama:** `work/real-pass-fixes` (worktree `~/.worktrees/mvpup-r3`, desde `main` en `752e3e4`).
+**Suite antes:** 362 tests · mypy 0 errores. **Suite después:** 506 tests · mypy 0 errores (22 ficheros).
+**Estado:** todo en el árbol de trabajo, staged, sin commits. El careo con Codex agotó sus 3 rondas
+en NO APTO (cada ronda cerró lo anterior y encontró algo nuevo); no se selló ni se usó override.
+
+### Hecho (cada punto con test rojo previo)
+
+1. **Instantánea por cuotas** (`anthropic_runner.py`): núcleo / código (rotando rutas API, lib,
+   esquema, interfaz, resto) / config-CI / docs / tests, con perfil por agente (código,
+   documentación, equilibrado) vía `snapshot_by_key`; cabecera con incluidos/candidatos y omitidos
+   por presupuesto; presupuesto TOTAL (estructura ≤ ¼, git log ≤ 1/10, recorte final tras redactar);
+   lockfiles fuera; `--repo` inválido = error de uso en todos los caminos; un agente sin instantánea
+   asignada falla a la vista. Secretos: mismos `is_secret_file`/`redact`, fijado por tests.
+2. **Regla de horizonte explícita** (`roadmap.py`): tabla impacto×esfuerzo + una bajada de horizonte
+   fuera de las dimensiones prioritarias (quick wins nunca). Coste/ejecutor ausentes se omiten y se
+   cuentan una vez. Con los hallazgos de la pasada real: H1/H2/H3 = 1/16/0 → 1/7/9.
+3. **Acción por hallazgo** (`prompts.py`, `parsing.py`, `dimensiones.md`, `dryrun.py`): `· Acción: …`
+   obligatoria (fallo cerrado: ausente, placeholder, >160 caracteres o copia del hallazgo); infinitivo
+   y 15 palabras solo se avisan en el log. Roadmap/TOP-5 muestran la acción con el hallazgo de
+   contexto. `compare` reconoce una acción por su texto o por su hallazgo: los JSON antiguos cargan.
+4. **Matriz**: una línea por ítem (≤ 80 caracteres + dimensión); lo descartado conserva su detalle
+   en una lista bajo el roadmap.
+5. **Consumo**: tokens entrada/salida, llamadas y modelo por agente y total (`usage` en el JSON, una
+   línea en el MD); ausente con FakeRunner/dry-run. Sin importes.
+6. **`--context-file`**: texto del operador en un bloque «contexto aportado por el operador, no
+   verificado» para todos los agentes, redactado; máx 20.000 caracteres. No veta por nombre de
+   fichero, ruta ni symlink: el operador lo elige a propósito y la defensa es `redact()`.
+   (`--context` ya existía como resumen de negocio: por eso el nombre nuevo.)
+
+### Pendiente
+
+- **Decisión del operador sobre el gate** (ver «Decidido»). Hasta entonces no hay commits, push ni PR.
+- El último arreglo (symlink en `--context-file`) no lo ha visto ningún revisor.
+- Copiar `skill/` a la skill instalada: `mvpup validate` rechaza ya los hallazgos sin `· Acción:`.
+- Segunda pasada real para comprobar que los agentes dan acciones y que el código llega.
+
+### Decidido
+
+- Careo nivel 1 (Codex), 3 rondas: R1 NO APTO (presupuesto total, validación de acción, `--repo`
+  inválido) · R2 NO APTO (validación de `--repo` esquivable, test vacío del log, ruta de
+  `--context-file`) · R3 NO APTO (symlink en `--context-file`). Todo corregido con rojo previo,
+  pero sin ronda que lo confirme: no se escribe un `APTO` que nadie dio.
+- **Opción c del operador (12/10):** fuera la guarda por nombre/ruta/symlink de `--context-file`
+  (perseguía un caso que el operador provoca a sabiendas); quedan lectura, vacío, tope y `redact()`.
+  Los tests de rechazo pasan a ser «se acepta y sale redactado», vistos en rojo antes. Suite: 505
+  tests · mypy 0. Careo nivel 1 (Codex) sobre el delta: sin hallazgos en la retirada de la guarda y
+  los dos tests nuevos no son vacíos; **NO APTO** por otra cosa, anterior al delta: `.strip()` se
+  aplica antes de medir el tope (un fichero relleno de espacios pasa). Corregido con rojo previo
+  (el tope mide el texto leído, antes de recortar; 506 tests · mypy 0). Ronda 2: el test nuevo no
+  es vacío; **NO APTO** otra vez por la misma clase: `read_text` convierte CRLF en LF antes de
+  medir. Lo enviado a los agentes nunca supera el tope en ninguno de los dos casos. Pendiente de
+  decisión del operador; el delta sigue sin stage ni commit.
+  Ronda 3 (contrato reescrito: el tope acota lo que se envía; sin cambios de código): CRLF ya no
+  es hallazgo; **NO APTO** porque `redact()` puede alargar el texto tras medir (20.000 caracteres
+  acabados en `postgres://u:x@h` → 20.010). Tope de 3 rondas agotado sin APTO: no se parchea más
+  sin que el operador decida el diseño del tope.
+
 ## 2026-10-11 (ronda 2) — Comparar pasadas, HTML autocontenido, ficha con frontmatter, 6 loops
 
 **Rama:** `claude/mvp-up-compare-reports-2ff53c` (desde `main` en `4903127`, el squash del PR #1).

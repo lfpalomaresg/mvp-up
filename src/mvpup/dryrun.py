@@ -32,64 +32,69 @@ _SCORES: dict[Dimension, str] = {
     Dimension.DATOS: "2",
 }
 
-# (quick win A/B, apuesta A/M, descartar B/A, [apuesta A/A opcional]) por dimensión.
-_FINDINGS: dict[Dimension, tuple[tuple[str, str], ...]] = {
+# (quick win A/B, apuesta A/M, descartar B/A, [apuesta A/A opcional]) por dimensión:
+# cada uno es (hallazgo, evidencia, acción).
+_FINDINGS: dict[Dimension, tuple[tuple[str, str, str], ...]] = {
     Dimension.TECNICA: (
-        ("Sin tests automatizados", "no existe carpeta tests/"),
-        ("Dependencias sin fijar versión", "requirements.txt sin versiones"),
-        ("Nombres de variables poco descriptivos", "utils.py usa x, y, tmp"),
-        ("Monolito sin separación de capas", "app.py concentra rutas, lógica y SQL"),
+        ("Sin tests automatizados", "no existe carpeta tests/", "Añadir pytest con un test de humo"),
+        ("Dependencias sin fijar versión", "requirements.txt sin versiones", "Fijar versiones en requirements.txt"),
+        ("Nombres de variables poco descriptivos", "utils.py usa x, y, tmp", "Renombrar las variables de utils.py"),
+        ("Monolito sin separación de capas", "app.py concentra rutas, lógica y SQL", "Separar rutas, lógica y acceso a datos"),
     ),
     Dimension.SEGURIDAD: (
-        ("Cabeceras de seguridad ausentes", "respuesta HTTP sin CSP ni HSTS"),
-        ("Sin límite de peticiones en el login", "ruta /login sin rate limiting"),
-        ("Logs demasiado verbosos en desarrollo", "config/dev.py con nivel DEBUG"),
+        ("Cabeceras de seguridad ausentes", "respuesta HTTP sin CSP ni HSTS", "Añadir cabeceras CSP y HSTS"),
+        ("Sin límite de peticiones en el login", "ruta /login sin rate limiting", "Limitar los intentos de login por IP"),
+        ("Logs demasiado verbosos en desarrollo", "config/dev.py con nivel DEBUG", "Bajar el nivel de log por defecto"),
     ),
     Dimension.LEGAL: (
-        ("Falta la política de privacidad", "la web no enlaza ningún texto legal"),
-        ("Banner de cookies sin rechazo en un clic", "el banner solo ofrece aceptar"),
-        ("Licencias de iconos sin inventariar", "assets/icons sin fichero de licencia"),
+        ("Falta la política de privacidad", "la web no enlaza ningún texto legal", "Publicar la política de privacidad"),
+        ("Banner de cookies sin rechazo en un clic", "el banner solo ofrece aceptar", "Añadir el botón de rechazar al banner"),
+        ("Licencias de iconos sin inventariar", "assets/icons sin fichero de licencia", "Inventariar las licencias de los iconos"),
     ),
     Dimension.PRODUCTO_UX: (
-        ("Onboarding sin estado vacío explicado", "la pantalla inicial aparece en blanco"),
-        ("Propuesta de valor poco clara en la portada", "el titular no dice qué resuelve"),
-        ("Iconografía inconsistente entre pantallas", "dos sets de iconos distintos"),
+        ("Onboarding sin estado vacío explicado", "la pantalla inicial aparece en blanco", "Explicar el primer paso en la pantalla inicial"),
+        ("Propuesta de valor poco clara en la portada", "el titular no dice qué resuelve", "Reescribir el titular de la portada"),
+        ("Iconografía inconsistente entre pantallas", "dos sets de iconos distintos", "Unificar el set de iconos"),
     ),
     Dimension.COMERCIAL: (
-        ("Oferta sin garantía formulada", "la página de precios no menciona garantía"),
-        ("Pricing sin justificar frente a la competencia", "un único plan sin comparativa"),
-        ("Material de venta en formatos dispares", "carpeta ventas/ con pdf, ppt y docx"),
-        ("Rediseñar el proceso de venta de principio a fin", "no hay embudo documentado"),
+        ("Oferta sin garantía formulada", "la página de precios no menciona garantía", "Formular una garantía en la página de precios"),
+        ("Pricing sin justificar frente a la competencia", "un único plan sin comparativa", "Justificar el precio frente a la competencia"),
+        ("Material de venta en formatos dispares", "carpeta ventas/ con pdf, ppt y docx", "Unificar el material de venta en un formato"),
+        ("Rediseñar el proceso de venta de principio a fin", "no hay embudo documentado", "Documentar el embudo de venta de extremo a extremo"),
     ),
     Dimension.MARKETING: (
-        ("Sin prueba social visible", "ningún testimonio ni caso en la web"),
-        ("Propuesta de valor poco clara en la portada", "el titular es genérico"),
-        ("Colores de marca no definidos", "cada pieza usa un azul distinto"),
+        ("Sin prueba social visible", "ningún testimonio ni caso en la web", "Publicar un testimonio en la portada"),
+        ("Propuesta de valor poco clara en la portada", "el titular es genérico", "Reescribir el titular de la portada"),
+        ("Colores de marca no definidos", "cada pieza usa un azul distinto", "Definir la paleta de marca"),
     ),
     Dimension.MERCADO: (
-        ("Competidores directos sin tabla comparativa", "docs/ no recoge competencia"),
-        ("Pricing sin justificar frente a la competencia", "sin referencia de precios del sector"),
-        ("Tendencias del sector sin fuente citada", "la ficha cita cifras sin enlace"),
+        ("Competidores directos sin tabla comparativa", "docs/ no recoge competencia", "Montar la tabla comparativa de competidores"),
+        ("Pricing sin justificar frente a la competencia", "sin referencia de precios del sector", "Justificar el precio frente a la competencia"),
+        ("Tendencias del sector sin fuente citada", "la ficha cita cifras sin enlace", "Citar la fuente de cada cifra del sector"),
     ),
     Dimension.ECONOMICA: (
-        ("Costes recurrentes sin inventariar", "ningún fichero lista hosting ni APIs"),
-        ("Margen unitario sin calcular", "no hay hoja de costes por cliente"),
-        ("Gasto hundido documentado solo de memoria", "sin registro de horas invertidas"),
-        ("Rehacer el modelo económico completo", "no existe modelo de ingresos"),
+        ("Costes recurrentes sin inventariar", "ningún fichero lista hosting ni APIs", "Inventariar hosting, APIs y licencias"),
+        ("Margen unitario sin calcular", "no hay hoja de costes por cliente", "Calcular el margen por cliente"),
+        ("Gasto hundido documentado solo de memoria", "sin registro de horas invertidas", "Registrar las horas invertidas"),
+        ("Rehacer el modelo económico completo", "no existe modelo de ingresos", "Construir el modelo de ingresos"),
     ),
     Dimension.OPERATIVA: (
-        ("Onboarding de cliente sin checklist", "los pasos viven en la cabeza del operador"),
-        ("Soporte sin canal definido", "los clientes escriben a un correo personal"),
-        ("Plantillas de correo sin unificar", "tres versiones del mismo correo"),
+        ("Onboarding de cliente sin checklist", "los pasos viven en la cabeza del operador", "Escribir la checklist de alta de cliente"),
+        ("Soporte sin canal definido", "los clientes escriben a un correo personal", "Abrir un canal único de soporte"),
+        ("Plantillas de correo sin unificar", "tres versiones del mismo correo", "Unificar las plantillas de correo"),
     ),
     Dimension.DATOS: (
-        ("Sin analítica instalada", "index.html sin ningún script de medición"),
-        ("Sin canal de feedback de usuarios", "no hay formulario ni correo de feedback"),
-        ("Dashboard decorativo sin métrica accionable", "panel con gráficas que nadie consulta"),
+        ("Sin analítica instalada", "index.html sin ningún script de medición", "Instalar una analítica web"),
+        ("Sin canal de feedback de usuarios", "no hay formulario ni correo de feedback", "Añadir un formulario de feedback"),
+        ("Dashboard decorativo sin métrica accionable", "panel con gráficas que nadie consulta", "Elegir una métrica accionable para el panel"),
     ),
 }
 # Hallazgo compartido por TODAS las dimensiones: aparece como estructural en cualquier plan.
-_SHARED_FINDING = ("Sin métricas de uso para decidir", "ninguna decisión del último mes se tomó con datos")
+_SHARED_FINDING = (
+    "Sin métricas de uso para decidir",
+    "ninguna decisión del último mes se tomó con datos",
+    "Definir las tres métricas de uso que guían las decisiones",
+)
 _SHARED_MISSING = "Volumen mensual de usuarios activos"
 _LEVELS = ("A · Esfuerzo: B", "A · Esfuerzo: M", "M · Esfuerzo: B", "B · Esfuerzo: A", "A · Esfuerzo: A")
 
@@ -98,8 +103,8 @@ def _finding_lines(dim: Dimension) -> list[str]:
     own = list(_FINDINGS[dim])
     rows = [own[0], own[1], _SHARED_FINDING, own[2], *own[3:]]
     return [
-        f"- [H{n}] {text} · Impacto: {_LEVELS[n - 1]} · Evidencia: {SYNTHETIC} {evidence}"
-        for n, (text, evidence) in enumerate(rows, 1)
+        f"- [H{n}] {text} · Impacto: {_LEVELS[n - 1]} · Evidencia: {SYNTHETIC} {evidence} · Acción: {action}"
+        for n, (text, evidence, action) in enumerate(rows, 1)
     ]
 
 

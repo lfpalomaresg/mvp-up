@@ -20,8 +20,9 @@ from .consolidation import Entry, Quadrant, Structural, build_matrix, structural
 from .dimensions import Dimension, Mode
 from .intake import Intake
 from .orchestrator import PassResult
-from .parsing import LIGERA_TEMPLATE
-from .roadmap import Horizon, Roadmap, build_roadmap, top_five
+from .runners import AgentUsage
+from .parsing import LIGERA_TEMPLATE, shorten
+from .roadmap import HORIZON_RULE_NOTE, Horizon, Roadmap, RoadmapItem, build_roadmap, top_five
 from .scoring import fmt_score, global_score, status_icon
 
 SCHEMA_VERSION = 1
@@ -150,12 +151,27 @@ def build_report(
     return report
 
 
+MATRIX_ITEM_CHARS = 80  # una línea corta por ítem de la matriz; el detalle vive en el roadmap
+
+
 def _entry(e: Entry) -> str:
+    """Hallazgo completo con su dimensión y evidencia (el detalle del informe)."""
     return f"{e.finding.text} ({e.dimension.label} · Evidencia: {e.finding.evidence})"
 
 
+def _entry_with_action(e: Entry) -> str:
+    """Detalle de un hallazgo que NO se programa, con la acción que proponía el agente."""
+    action = f" · acción propuesta: {e.finding.action}" if e.finding.action else ""
+    return _entry(e) + action
+
+
+def _cell_item(e: Entry) -> str:
+    """Ítem de la matriz: la acción (o el hallazgo abreviado) y su dimensión, en una línea."""
+    return f"{shorten(e.finding.label, MATRIX_ITEM_CHARS)} ({e.dimension.label})"
+
+
 def _cell(entries: list[Entry]) -> str:
-    return "<br>".join(_entry(e).replace("|", "\\|") for e in entries) or "—"
+    return "<br>".join(_cell_item(e).replace("|", "\\|") for e in entries) or "—"
 
 
 def _scores_table(report: Report) -> list[str]:
@@ -177,27 +193,71 @@ def _scores_table(report: Report) -> list[str]:
     return rows
 
 
-def _roadmap_lines(roadmap: Roadmap) -> list[str]:
-    out: list[str] = []
+def _roadmap_item_line(i: RoadmapItem) -> str:
+    """Una acción del roadmap. Coste y ejecutor solo se imprimen si se conocen."""
+    parts = [i.entry.finding.label]
+    if i.has_cost:
+        parts.append(f"~{i.cost}")
+    parts.append(f"sube {i.dimension_labels}")
+    if i.has_owner:
+        parts.append(f"ejecutable por: {i.owner}")
+    if i.queued:
+        parts.append("encolar")
+    return "- [ ] " + " · ".join(parts)
+
+
+def _roadmap_context_lines(i: RoadmapItem) -> list[str]:
+    """El detalle de la acción: el hallazgo que la motiva y su evidencia.
+
+    Sin acción (informes/parsers antiguos) la línea ya ES el hallazgo: solo falta su evidencia.
+    """
+    lines = []
+    for e in (i.entry, *i.related):
+        if e is i.entry and not e.finding.action:
+            lines.append(f"  - Evidencia: {e.finding.evidence}")
+        else:
+            lines.append(f"  - Hallazgo: {_entry(e)}")
+    return lines
+
+
+def _unknowns_line(roadmap: Roadmap) -> str | None:
+    """Cuántas acciones programadas carecen de coste o ejecutor: se dice UNA vez, no en cada línea."""
+    items = roadmap.all_items()
+    no_cost = sum(1 for i in items if not i.has_cost)
+    no_owner = sum(1 for i in items if not i.has_owner)
+    if not (no_cost or no_owner):
+        return None
+    return (
+        f"ℹ️ {no_cost} de {len(items)} acciones sin coste estimado · {no_owner} de {len(items)} sin "
+        "ejecutor asignado: ni los agentes ni el operador los aportaron, y no se inventan."
+    )
+
+
+def _roadmap_lines(roadmap: Roadmap, discarded: list[Entry]) -> list[str]:
+    out: list[str] = [HORIZON_RULE_NOTE, ""]
     for h in Horizon:
         out.append(f"### {h.value} — {h.label}")
         items = roadmap.items(h)
         if not items:
             out.append("- (sin acciones)")
         for i in items:
-            tail = " · encolar" if i.queued else ""
-            out.append(
-                f"- [ ] {i.entry.finding.text} · ~{i.cost} · sube {i.dimension_labels} · "
-                f"ejecutable por: {i.owner}{tail}"
-            )
+            out.append(_roadmap_item_line(i))
+            out.extend(_roadmap_context_lines(i))
         out.append("")
+    unknowns = _unknowns_line(roadmap)
+    if unknowns:
+        out += [unknowns, ""]
     if roadmap.backlog:
         out.append("Backlog «si sobra tiempo» (impacto bajo, no programado):")
-        out.extend(f"- {_entry(i.entry)}" for i in roadmap.backlog)
+        out.extend(f"- {_entry_with_action(i.entry)}" for i in roadmap.backlog)
         out.append("")
     if roadmap.not_justified:
         out.append("Apuestas no justificadas por el objetivo de valor (no se programan):")
-        out.extend(f"- {_entry(i.entry)}" for i in roadmap.not_justified)
+        out.extend(f"- {_entry_with_action(i.entry)}" for i in roadmap.not_justified)
+        out.append("")
+    if discarded:
+        out.append("Descartado por la matriz (impacto medio/bajo con esfuerzo medio/alto; no se programa):")
+        out.extend(f"- {_entry_with_action(e)}" for e in discarded)
         out.append("")
     if roadmap.wip_note:
         out.append(f"⚠️ Nota WIP: {roadmap.wip_note}")
@@ -227,6 +287,55 @@ def _discarded_lines(pr: PassResult) -> list[str]:
     ]
 
 
+def _thousands(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
+def _ordered_usage(pr: PassResult) -> dict[str, AgentUsage]:
+    """Consumo en el orden del plan (los agentes terminan en el orden que quieren los hilos)."""
+    planned = [t.key for t in pr.plan.tasks if t.key in pr.usage]
+    rest = sorted(k for k in pr.usage if k not in planned)
+    return {key: pr.usage[key] for key in (*planned, *rest)}
+
+
+def usage_summary(pr: PassResult) -> dict[str, Any] | None:
+    """Consumo de la pasada para el JSON: por agente, total y modelos. None si el runner no informa."""
+    usage = _ordered_usage(pr)
+    if not usage:
+        return None
+    agents = {
+        key: {"model": u.model, "input_tokens": u.input_tokens, "output_tokens": u.output_tokens, "calls": u.calls}
+        for key, u in usage.items()
+    }
+    return {
+        "agents": agents,
+        "total": {
+            "input_tokens": sum(u.input_tokens for u in usage.values()),
+            "output_tokens": sum(u.output_tokens for u in usage.values()),
+            "calls": sum(u.calls for u in usage.values()),
+        },
+        "models": sorted({u.model for u in usage.values()}),
+    }
+
+
+def usage_line(pr: PassResult) -> str | None:
+    """Una línea con el consumo. Solo tokens: los precios cambian, el importe no se calcula."""
+    summary = usage_summary(pr)
+    if summary is None:
+        return None
+    total = summary["total"]
+    calls = total["calls"]
+    per_agent = " · ".join(
+        f"{key} {_thousands(u['input_tokens'])}/{_thousands(u['output_tokens'])}"
+        for key, u in summary["agents"].items()
+    )
+    return (
+        f"**Consumo:** {_thousands(total['input_tokens'])} tokens de entrada · "
+        f"{_thousands(total['output_tokens'])} de salida · {calls} llamada{'s' if calls != 1 else ''} · "
+        f"modelo {', '.join(summary['models'])} (por agente, entrada/salida: {per_agent})"
+    )
+
+
 def _header_lines(report: Report) -> list[str]:
     it = report.intake
     lines = [
@@ -235,6 +344,16 @@ def _header_lines(report: Report) -> list[str]:
         f"**Modo:** {it.mode.value} · **Etapa:** {it.stage.value} · "
         f"**Objetivo de valor:** {it.objective.value}",
     ]
+    consumption = usage_line(report.pass_result)
+    if consumption:
+        lines.append(consumption)
+    supplied = len(it.operator_context.strip())
+    if supplied:
+        # Solo consta QUE se aportó: el texto no se copia al informe.
+        lines.append(
+            f"**Contexto del operador:** aportado ({_thousands(supplied)} caracteres, adjunto a todos "
+            "los agentes como dato no verificado)"
+        )
     if report.dry_run:
         lines.insert(2, DRY_RUN_NOTICE)
     return lines
@@ -273,7 +392,7 @@ def render_markdown(report: Report) -> str:
         "## Roadmap de escalado",
         "",
     ]
-    lines += _roadmap_lines(report.roadmap)
+    lines += _roadmap_lines(report.roadmap, m[Quadrant.DESCARTAR])
     lines.append("## Evolución (solo si hay pasada anterior)")
     lines += report.evolution or ["- Primera pasada: este informe es la línea base."]
     lines += ["", "## Datos pendientes que el operador debe aportar"]
@@ -330,7 +449,11 @@ def to_json(report: Report) -> dict[str, Any]:
                 "horizon": i.horizon.value,
                 "dimension": i.entry.dimension.value,
                 "dimensions": [d.value for d in i.dimensions],
-                "action": i.entry.finding.text,
+                "action": i.entry.finding.label,
+                "finding": i.entry.finding.text,
+                "finding_id": i.entry.finding.id,
+                "cost": i.cost if i.has_cost else None,
+                "owner": i.owner if i.has_owner else None,
             }
             for i in report.roadmap.all_items()
         ],
@@ -339,6 +462,7 @@ def to_json(report: Report) -> dict[str, Any]:
                 "dimension": d.value,
                 "id": f.id,
                 "text": f.text,
+                "action": f.action or None,
                 "impact": f.impact.value,
                 "effort": f.effort.value if f.effort else None,
                 "evidence": f.evidence,
@@ -348,6 +472,11 @@ def to_json(report: Report) -> dict[str, Any]:
             for f in pr.results[d].findings
         ],
         "top": report.top,
+        "usage": usage_summary(pr),
+        "operator_context": (
+            {"provided": True, "chars": len(it.operator_context.strip())}
+            if it.operator_context.strip() else None
+        ),
         "log": pr.log,
     }
     return data

@@ -58,7 +58,8 @@ def test_service_hint_added_without_software():
 def _fill(block: str, score: str) -> str:
     return (block.replace("X/10", score)
             .replace("<hallazgo>", "Algo").replace("A/M/B · Esfuerzo: A/M/B", "A · Esfuerzo: B")
-            .replace("<archivo/dato concreto>", "README.md"))
+            .replace("<archivo/dato concreto>", "README.md")
+            .replace("<qué hacer: verbo en infinitivo + objeto, máx 15 palabras>", "Hacer algo concreto"))
 
 
 def test_grouped_prompt_contract_round_trips_through_parser():

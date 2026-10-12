@@ -2,19 +2,40 @@
 
 El orquestador solo conoce el protocolo `AgentRunner`. `FakeRunner` sirve para
 tests, dry-run y demos sin red; los runners reales viven en módulos aparte.
+
+Un runner que consume tokens puede además exponer `usage()` (`UsageReporter`): el
+consumo por agente que el informe registra. Solo tokens: nunca importes en dinero.
 """
 
 from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Mapping, Sequence
-from typing import Protocol, Union
+from dataclasses import dataclass
+from typing import Protocol, Union, runtime_checkable
 
 Response = Union[str, Callable[[str], str]]
 
 
 class AgentRunner(Protocol):
     def run(self, prompt: str, *, task_key: str) -> str: ...
+
+
+@dataclass(frozen=True)
+class AgentUsage:
+    """Tokens consumidos por un agente (todas sus llamadas, reintentos incluidos) y su modelo."""
+
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    calls: int = 0
+
+
+@runtime_checkable
+class UsageReporter(Protocol):
+    """Opcional: un runner que sabe cuánto consumió cada agente (`task_key`)."""
+
+    def usage(self) -> dict[str, AgentUsage]: ...
 
 
 def _as_sequence(key: str, value: object) -> tuple[Response, ...]:

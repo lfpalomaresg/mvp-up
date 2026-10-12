@@ -18,11 +18,13 @@ Evalúa lo que indica tu bloque de dimensión y devuelve EXACTAMENTE este format
 
 ## Score: X/10 (rúbrica al pie)
 ## Hallazgos (máx 7, ordenados por impacto)
-- [H1] <hallazgo> · Impacto: A/M/B · Esfuerzo: A/M/B · Evidencia: <archivo/dato concreto>
+- [H1] <hallazgo> · Impacto: A/M/B · Esfuerzo: A/M/B · Evidencia: <archivo/dato concreto> · Acción: <qué hacer: verbo en infinitivo + objeto, máx 15 palabras>
 ## Quick wins (impacto A/M con esfuerzo B)
 ## Riesgos si no se actúa
 ## Datos que faltan para evaluar mejor
 ```
+
+**Regla de la acción:** Cada hallazgo termina con su ACCIÓN: una sola frase breve (máx 15 palabras) que empieza por un verbo en infinitivo y dice QUÉ hacer. No repitas el hallazgo ni lo expliques: el hallazgo dice qué pasa; la acción, qué se hace.
 
 **Rúbrica común 0-10:** 0-2 crítico o inexistente · 3-4 deficiente, bloquea el escalado ·
 5-6 funcional con huecos claros · 7-8 sólido, mejoras incrementales · 9-10 listo para escalar.

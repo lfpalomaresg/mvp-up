@@ -45,6 +45,9 @@ COST_HINT = {
 }
 TOKENS_PER_AGENT_K = (60, 100)
 
+# Tope del fichero de `--context-file`: se adjunta a TODOS los agentes (coste × nº de agentes).
+OPERATOR_CONTEXT_MAX_CHARS = 20_000
+
 CRITICAL_OBJECTIVES = (Objective.VENDIBLE, Objective.INVERSION)
 CRITICAL_MODEL = "claude-opus-5-5"
 
@@ -101,6 +104,10 @@ def _add_intake_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--repo", help="ruta local del repo/carpeta del producto")
     p.add_argument("--url", help="URL desplegada")
     p.add_argument("--context", default="", help="resumen de negocio (texto)")
+    p.add_argument("--context-file", metavar="FICHERO.md",
+                   help="fichero de texto libre del operador (resultados de tests, URL de producción, "
+                        "métricas…) que se adjunta a todos los agentes como «contexto aportado por el "
+                        "operador, no verificado», tras redactar secretos")
     p.add_argument("--ficha", help="ruta de la ficha del producto (modo ligera)")
     p.add_argument("--wip-context", default="", help="foco estratégico / carriles WIP")
     p.add_argument("--not-in-wip", action="store_true", help="producto fuera de carriles activos")
@@ -110,7 +117,28 @@ def _add_intake_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--no-customer-data", action="store_true", help="sin datos de clientes")
 
 
+def read_operator_context(path: Path) -> str:
+    """Texto de `--context-file`, ya redactado. Cualquier problema es un error de uso (antes de pagar).
+
+    El operador elige el fichero a propósito: no se veta por nombre ni por ruta, la defensa es `redact()`.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise CliError(f"--context-file: no se pudo leer {path} ({type(exc).__name__})") from exc
+    if not text.strip():
+        raise CliError(f"--context-file: {path} está vacío")
+    # El tope mide el fichero tal cual, antes de recortar blancos: el relleno no lo esquiva.
+    if len(text) > OPERATOR_CONTEXT_MAX_CHARS:
+        raise CliError(
+            f"--context-file: {path} es demasiado largo ({len(text)} caracteres; máx "
+            f"{OPERATOR_CONTEXT_MAX_CHARS}): se adjunta a todos los agentes, resume lo esencial"
+        )
+    return redact(text.strip())
+
+
 def _intake(args: argparse.Namespace) -> Intake:
+    operator_context = read_operator_context(Path(args.context_file)) if args.context_file else ""
     return Intake(
         product=args.product,
         stage=args.stage,
@@ -119,6 +147,7 @@ def _intake(args: argparse.Namespace) -> Intake:
         repo_path=args.repo,
         url=args.url,
         context=args.context,
+        operator_context=operator_context,
         ficha_path=args.ficha,
         wip_context=args.wip_context,
         in_wip_lanes=not args.not_in_wip,
@@ -154,7 +183,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
-def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
+def check_repo_path(repo: Path) -> None:
+    """`--repo` debe ser un directorio real: si no, los agentes auditarían un aviso, no el repo."""
+    if repo.is_symlink():
+        raise CliError(f"--repo {repo} es un symlink: no se siguen enlaces, pasa la ruta real")
+    if not repo.is_dir():
+        raise CliError(f"--repo {repo} no existe o no es un directorio: no se lanza ningún agente")
+
+
+def _runner(args: argparse.Namespace, intake: Intake, plan: Plan) -> AgentRunner:
     if args.runner == "fake":
         from .runners import FakeRunner
 
@@ -167,14 +204,23 @@ def _runner(args: argparse.Namespace, intake: Intake) -> AgentRunner:
             return FakeRunner(data)
         except TypeError as exc:
             raise CliError(f"--fake-responses: {exc}") from exc
-    from .anthropic_runner import AnthropicRunner, repo_snapshot
+    from .anthropic_runner import AnthropicRunner, SnapshotProfile, repo_snapshot, snapshots_for_tasks
     from .config import API_KEY_ENV, load_dotenv
+    from .orchestrator import LIGERA_TASK_KEY
 
     load_dotenv(Path.cwd() / ".env")
     if not os.environ.get(API_KEY_ENV):
         raise CliError(f"falta {API_KEY_ENV}: defínela en .env (gitignoreado) o en el entorno")
-    snapshot = repo_snapshot(intake.repo_path) if intake.repo_path else ""
-    return AnthropicRunner(model=args.model, snapshot=snapshot, model_by_key=critical_models(intake))
+    # Una instantánea por perfil de agente: el técnico recibe código; el comercial, documentación.
+    snapshots: dict[str, str] = {}
+    if intake.repo_path and intake.mode is Mode.LIGERA:
+        # El agente único de ligera mira todas las dimensiones y se llama con su propia clave.
+        snapshots = {LIGERA_TASK_KEY: repo_snapshot(intake.repo_path, profile=SnapshotProfile.BALANCED)}
+    elif intake.repo_path:
+        snapshots = snapshots_for_tasks(intake.repo_path, plan.tasks)
+    return AnthropicRunner(
+        model=args.model, snapshot_by_key=snapshots, model_by_key=critical_models(intake)
+    )
 
 
 def _git(probe: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -216,7 +262,7 @@ def check_out_dir(out: Path) -> None:
 
 def cmd_run(args: argparse.Namespace) -> int:
     from .orchestrator import run_pass
-    from .report import build_report, save_report
+    from .report import build_report, save_report, usage_line
 
     intake = _intake(args)
     if args.model:
@@ -231,6 +277,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise CliError("--fake-responses solo tiene sentido con --runner fake (¿querías simular la pasada?)")
     if args.dry_run and args.anclar:
         raise CliError("--anclar no se combina con --dry-run: un informe sintético no se ancla en una ficha real")
+    if intake.repo_path:
+        # En TODOS los caminos (real, fake, dry-run) y antes de leer .env o pedir la API key.
+        check_repo_path(Path(intake.repo_path))
     out = Path(args.out or os.environ.get(REPORTS_ENV) or DEFAULT_REPORTS_DIR)
     check_out_dir(out)
     plan = build_plan(intake)
@@ -241,7 +290,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         print("DRY-RUN: pasada simulada con datos sintéticos (sin red, sin API key, sin coste).", file=sys.stderr)
         runner: AgentRunner = FakeRunner(dry_run_responses(plan, intake.mode))
     else:
-        runner = _runner(args, intake)
+        runner = _runner(args, intake, plan)
     _print_plan(intake, plan, sys.stderr)
     print(f"Lanzando pasada {intake.mode.value} ({cost_hint(intake.mode, len(plan.tasks))})…", file=sys.stderr)
     result = run_pass(intake, runner, plan=plan, agent_timeout=args.timeout)
@@ -250,6 +299,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     for line in result.log:
         print(f"  · {line}", file=sys.stderr)
     print(f"Informe: {path}")
+    consumption = usage_line(result)
+    if consumption:
+        print(consumption.replace("**", ""))
     if args.html:
         print(f"HTML: {write_html(path)}")
     if not result.results and result.ligera is None:
