@@ -167,3 +167,120 @@ def test_status_icon_matches_the_displayed_rounded_score():
     md = render_markdown(build_report(run_pass(intake, runner), today=TODAY))
     assert "| Técnica | 7,0/10 | — | 🟢 |" in md
     assert "| Producto / UX | 5,0/10 | — | 🟡 |" in md
+
+
+# --- Roadmap: campos ausentes se omiten y se cuentan UNA vez --------------------------------------
+
+
+def _roadmap_section(md: str) -> str:
+    return md.split("## Roadmap de escalado", 1)[1].split("## Evolución", 1)[0]
+
+
+def test_roadmap_lines_omit_unknown_cost_and_owner():
+    section = _roadmap_section(render_markdown(build_report(express_pass(), today=TODAY)))
+    assert "N/D" not in section and "por decidir" not in section and "ejecutable por" not in section
+    assert "- [ ] Añadir pytest con un test de humo · sube Técnica" in section
+
+
+def test_roadmap_counts_missing_cost_and_owner_once():
+    report = build_report(express_pass(), today=TODAY)
+    section = _roadmap_section(render_markdown(report))
+    total = len(report.roadmap.all_items())
+    lines = [ln for ln in section.splitlines() if "sin coste estimado" in ln]
+    assert len(lines) == 1
+    assert f"{total} de {total} acciones sin coste estimado" in lines[0]
+    assert f"{total} de {total} sin ejecutor asignado" in lines[0]
+
+
+def test_roadmap_prints_cost_and_owner_when_known():
+    from dataclasses import replace
+
+    from mvpup.roadmap import Horizon
+
+    report = build_report(express_pass(), today=TODAY)
+    items = report.roadmap.by_horizon[Horizon.H1]
+    items[0] = replace(items[0], cost="2 h", owner="operador")
+    section = _roadmap_section(render_markdown(report))
+    assert "· ~2 h · sube" in section and "· ejecutable por: operador" in section
+    total = len(report.roadmap.all_items())
+    assert f"{total - 1} de {total} acciones sin coste estimado" in section
+
+
+def test_roadmap_states_its_horizon_rule():
+    section = _roadmap_section(render_markdown(build_report(express_pass(), today=TODAY)))
+    assert "Regla de horizonte" in section and "impacto × esfuerzo" in section
+
+
+def test_json_roadmap_keeps_cost_and_owner_as_null_when_unknown():
+    data = report_to_json(build_report(express_pass(), today=TODAY))
+    assert data["roadmap"] and all(i["cost"] is None and i["owner"] is None for i in data["roadmap"])
+
+
+# --- Matriz: una línea corta por ítem; el detalle vive en el roadmap ------------------------------
+
+
+def _matrix_cells(md: str) -> list[str]:
+    section = md.split("## Matriz impacto × esfuerzo", 1)[1].split("## Roadmap de escalado", 1)[0]
+    rows = [ln for ln in section.splitlines() if ln.startswith("| **Impacto")]
+    return [cell.strip() for row in rows for cell in row.strip("|").split(" | ")[1:]]
+
+
+def _items(cell: str) -> list[str]:
+    return cell.split(": ", 1)[1].split("<br>")
+
+
+def _paragraph_pass():
+    """Como la primera pasada real: hallazgos de un párrafo entero, con y sin acción."""
+    from mvpup.parsing import DimensionResult, Finding, Level
+
+    paragraph = ("La economía unitaria no está cerrada. " + "El punto de equilibrio depende de un dato sin verificar. " * 6).strip()
+    result = express_pass()
+    result.results = {
+        next(iter(result.results)): DimensionResult(score=5, findings=[
+            Finding("H1", paragraph, Level.ALTO, Level.BAJO, "docs/oferta.md §6", action="Cerrar la economía unitaria con el gestor"),
+            Finding("H2", paragraph.replace("economía", "tesorería"), Level.ALTO, Level.MEDIO, "docs/oferta.md §7"),
+            Finding("H3", "Texto | con barra", Level.MEDIO, Level.BAJO, "README.md", action="Quitar la barra | del texto"),
+        ])
+    }
+    return result
+
+
+def test_matrix_cells_hold_one_short_line_per_item():
+    from mvpup.report import MATRIX_ITEM_CHARS
+
+    md = render_markdown(build_report(_paragraph_pass(), today=TODAY))
+    items = [item for cell in _matrix_cells(md) if cell.split(": ", 1)[1] != "—" for item in _items(cell)]
+    assert len(items) == 3
+    for item in items:
+        title, dim = item.rsplit(" (", 1)
+        assert len(title) <= MATRIX_ITEM_CHARS and dim == "Técnica)"
+        assert "Evidencia" not in item  # el detalle no va en la celda
+
+
+def test_matrix_shows_the_action_or_the_truncated_finding():
+    md = render_markdown(build_report(_paragraph_pass(), today=TODAY))
+    quick, bets, later, _ = _matrix_cells(md)
+    assert _items(quick) == ["Cerrar la economía unitaria con el gestor (Técnica)"]
+    (bet,) = _items(bets)
+    assert bet.startswith("La tesorería unitaria no está cerrada.") and bet.endswith("… (Técnica)")
+    assert _items(later) == ["Quitar la barra \\| del texto (Técnica)"]  # la barra no rompe la tabla
+
+
+def test_detail_dropped_from_the_matrix_is_still_in_the_roadmap():
+    md = render_markdown(build_report(_paragraph_pass(), today=TODAY))
+    roadmap = md.split("## Roadmap de escalado", 1)[1].split("## Evolución", 1)[0]
+    assert "El punto de equilibrio depende de un dato sin verificar. " * 5 in roadmap
+    assert "Evidencia: docs/oferta.md §6" in roadmap and "Evidencia: docs/oferta.md §7" in roadmap
+
+
+def test_discarded_findings_keep_their_detail_outside_the_matrix():
+    """Lo que la matriz descarta no entra en el roadmap, pero su evidencia no puede perderse del informe."""
+    md = render_markdown(build_report(express_pass(), today=TODAY))  # H3 de VALID_OUTPUT es M/A → descartar
+    roadmap = md.split("## Roadmap de escalado", 1)[1].split("## Evolución", 1)[0]
+    lines = roadmap.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("Descartado por la matriz"))
+    assert (
+        "- Arquitectura monolítica (Técnica · Evidencia: app.py de 2.000 líneas) · "
+        "acción propuesta: Separar la aplicación en módulos"
+    ) in lines[start + 1:start + 4]  # una línea por dimensión que lo citó
+    assert "- [ ] Separar la aplicación en módulos" not in roadmap  # sigue sin programarse

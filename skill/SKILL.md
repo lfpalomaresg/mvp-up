@@ -74,7 +74,7 @@ El usuario puede añadir/quitar dimensiones antes de lanzar.
 - **Full**: 10 agentes (uno por dimensión). **Express**: 3-5 agentes según tabla anterior.
 - Cada agente recibe su prompt de `references/dimensiones.md` (bloque de su dimensión + plantilla común) rellenando: producto, ruta, URL, etapa, objetivo de valor, contexto AI_OS.
 - Agentes de **solo lectura/análisis**: prohibido editar archivos, hacer commits o llamar APIs de pago sin avisar.
-- Cada agente devuelve el formato estándar: score 0-10 + hallazgos (máx 7, con impacto A/M/B y esfuerzo A/M/B) + quick wins + riesgos.
+- Cada agente devuelve el formato estándar: score 0-10 + hallazgos (máx 7, con impacto A/M/B, esfuerzo A/M/B, evidencia y una **acción** breve en infinitivo) + quick wins + riesgos. El roadmap y el TOP-5 muestran la acción; el hallazgo queda como contexto.
 - **Validador de formato (obligatorio):** al recibir cada output, comprobar que contiene los headers `##` EXACTOS de su plantilla (completa o ligera); si falta alguno → un reintento con prompt reforzado (misma regla que para fallos de contenido). El MISMO check aplica al orquestador en la consolidación: los informes finales conservan los headers de sus plantillas — el orquestador NO condensa ni reinventa el formato (lección de autoevaluación: el primer incumplimiento real lo cometió el orquestador, no un agente).
 - **Límites operativos:** máximo 5 agentes en paralelo por lote (full = 2 lotes de 5). Coste orientativo medido en la calibración 2026-07 (agentes Sonnet): ligera ≈ 60-80k tokens · express ≈ 250-400k · full ≈ ~1M. Recordar modo y coste al usuario antes de lanzar full.
 - Si una dimensión no aplica (p.ej. "técnica" en un servicio sin software como un spa), no lanzar su agente y marcar N/A en el informe.
@@ -111,10 +111,12 @@ en `AI_OS/WORKFLOWS.md`.
 
 ### Fase 3 · Roadmap de escalado
 
-Tres horizontes, cada acción con coste estimado (horas/€) y a qué dimensión sube el score:
+Tres horizontes, cada acción con a qué dimensión sube el score (y su coste estimado en horas/€ y quién la ejecuta SOLO si hay fuente: no se inventan; si faltan, se dice una vez cuántas acciones carecen de ellos):
 - **H1 — Esta semana**: quick wins.
 - **H2 — Este mes**: mejoras de fondo con ROI claro.
 - **H3 — Trimestre**: apuestas estratégicas (solo si el objetivo de valor las justifica).
+
+**Regla de horizonte (explícita):** impacto alto × esfuerzo bajo → H1 · alto × medio → H2 · alto × alto → H3 · medio × bajo → H2 · bajo × bajo → backlog · el resto se descarta. Una acción de una dimensión que NO pesa ×2 para el objetivo de valor baja un horizonte (H2 → H3; H3 → «no justificada»); los quick wins nunca bajan, y si ninguna dimensión evaluada es prioritaria H2 no se difiere.
 
 Respetar la regla WIP del foco estratégico: si el producto no está en los carriles activos, el roadmap lo dice explícitamente y recomienda encolar, no ejecutar.
 

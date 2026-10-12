@@ -121,10 +121,10 @@ dependencias) del orquestador, para que el método sea reproducible y testeable:
 | `prompts.py` | 1 | Prompts por dimensión (copia literal de `dimensiones.md`), agrupados y ligera |
 | `parsing.py` | 1 | Validador de headers EXACTOS + parser (completo, agrupado con rescate parcial, ligera) |
 | `orchestrator.py` | 1 | Lotes ≤5, reintento con prompt reforzado, «sin evaluar», timeout por intento |
-| `runners.py` · `anthropic_runner.py` | 1 | `FakeRunner` (tests y dry-run) y runner real con la API de Claude + instantánea del repo sin secretos |
+| `runners.py` · `anthropic_runner.py` | 1 | `FakeRunner` (tests y dry-run) y runner real con la API de Claude + instantánea del repo sin secretos, repartida por cuotas (núcleo, código, config, docs, tests) según el perfil de cada agente; consumo de tokens por agente |
 | `dryrun.py` | 1 | Salidas sintéticas por dimensión para `run --dry-run`: toda la tubería sin red ni API key |
 | `scoring.py` · `consolidation.py` | 2 | Score ponderado, matriz impacto×esfuerzo, hallazgos estructurales |
-| `roadmap.py` | 3 | H1/H2/H3, backlog, apuestas no justificadas, regla WIP, TOP-5 |
+| `roadmap.py` | 3 | Regla de horizonte explícita (impacto×esfuerzo + objetivo), backlog, apuestas no justificadas, regla WIP, TOP-5 |
 | `compare.py` | 4 | Δ por dimensión, caídas en rojo, cambio de objetivo (recalcula), aviso >6 meses; `mvpup compare` entre dos informes guardados |
 | `report.py` | 5 | Informe MD con los headers de la plantilla + JSON gemelo versionado |
 | `htmlreport.py` | 5 | Informe HTML autocontenido (sin CDN ni JS) a partir del Markdown; matriz como tabla accesible |
@@ -150,6 +150,11 @@ mvpup run --product "Mi producto" --stage mvp --objective ingresos --dry-run
 # En full con objetivo vendible/inversión, económica y comercial van con Opus (SKILL.md).
 cp .env.example .env   # y rellena ANTHROPIC_API_KEY — .env está gitignoreado
 mvpup run --product "Mi producto" --stage mvp --objective ingresos --repo ../mi-producto
+
+# Aportar lo que ya sabes (resultados de tests, URL de producción, métricas) para que los agentes
+# no lo pidan en «Datos pendientes»: texto libre que se adjunta a TODOS los agentes como
+# «contexto aportado por el operador, no verificado», con los secretos redactados (máx 20.000 car.)
+mvpup run ... --context-file notas-operador.md
 
 # Anclar la pasada en la ficha del producto: --ficha actualiza su frontmatter (fecha, score,
 # ruta del informe) sin tocar el resto; --anclar añade además el bloque «LEER AL RETOMAR»
@@ -247,12 +252,24 @@ El Markdown conserva los headers exactos de `skill/references/plantilla-informe.
    acción sube varias dimensiones a la vez.
 4. **Matriz impacto × esfuerzo** — TODOS los hallazgos con evidencia, en su cuadrante: ⚡ quick
    wins (impacto alto, esfuerzo bajo), 🎯 apuestas (alto / medio-alto), 📋 si sobra tiempo
-   (medio-bajo / bajo) y 🗑️ descartar. Dentro de cada celda, primero los de mayor impacto y de
-   dimensiones prioritarias para tu objetivo.
-5. **Roadmap de escalado** — H1 (esta semana) = quick wins · H2 (este mes) = apuestas de
-   esfuerzo medio y «si sobra tiempo» de impacto medio · H3 (trimestre) = apuestas de esfuerzo
-   alto **solo** si su dimensión pesa ×2 para el objetivo; el resto queda listado como «no
-   justificadas». Coste `~N/D` y «ejecutable por: por decidir» no se inventan. Una acción
+   (medio-bajo / bajo) y 🗑️ descartar. Cada ítem es **una línea corta**: la acción (o el
+   hallazgo abreviado a 80 caracteres) y su dimensión; el detalle vive en el roadmap. Dentro de
+   cada celda, primero los de mayor impacto y de dimensiones prioritarias para tu objetivo.
+5. **Roadmap de escalado** — cada línea es la **acción** que propuso el agente (breve, en
+   infinitivo) y debajo el hallazgo que la motiva con su evidencia. Regla de horizonte, explícita
+   y sin depender de coste ni ejecutor:
+
+   | Impacto | Esfuerzo bajo | Esfuerzo medio | Esfuerzo alto |
+   |---|---|---|---|
+   | Alto | H1 (quick win) | H2 | H3 |
+   | Medio | H2 | descartar | descartar |
+   | Bajo | backlog | descartar | descartar |
+
+   Una acción de una dimensión que **no** pesa ×2 para tu objetivo baja un horizonte (H2 → H3;
+   H3 → «no justificada», no se programa); los quick wins nunca bajan, y si ninguna dimensión
+   evaluada es prioritaria H2 no se difiere. Coste y ejecutor no se inventan: si nadie los
+   aportó no se imprimen en cada línea, y una sola nota dice cuántas acciones carecen de ellos.
+   Lo que la matriz descarta se lista al final con su evidencia (no se programa). Una acción
    estructural se fusiona en una sola línea que «sube A + B». Fuera de carriles WIP todo va
    marcado «encolar».
 6. **Evolución** — solo con pasada anterior: score anterior, caídas en 🔴 con causa probable
@@ -262,11 +279,25 @@ El Markdown conserva los headers exactos de `skill/references/plantilla-informe.
 7. **Datos pendientes que el operador debe aportar** — lo que los agentes pidieron (deduplicado
    entre dimensiones), los hallazgos que un agente citó **sin evidencia** y por eso se quitaron,
    y las dimensiones a re-evaluar.
-8. **TOP-5 propuesto para autorización** — estructurales primero, luego H1→H3. Nada se ejecuta
-   hasta que lo autorices.
+8. **TOP-5 propuesto para autorización** — estructurales primero, luego H1→H3; cada línea es
+   la acción con su hallazgo abreviado entre paréntesis. Nada se ejecuta hasta que lo autorices.
 
-El `.json` gemelo guarda lo mismo de forma estructurada (`scores`, `findings`, `roadmap`,
-`top`, `log`); es lo que lee la pasada siguiente para calcular los Δ y lo que usa `cartera`.
+La cabecera lleva además, cuando aplica, una línea **Consumo** (tokens de entrada y salida,
+llamadas y modelo, total y por agente — solo tokens, nunca importes: los precios cambian) y
+otra que indica que se aportó contexto del operador (no se copia su texto al informe).
+
+El `.json` gemelo guarda lo mismo de forma estructurada (`scores`, `findings` con su `action`,
+`roadmap` con `action` + `finding`, `top`, `usage`, `operator_context`, `log`); es lo que lee
+la pasada siguiente para calcular los Δ y lo que usa `cartera`. `usage` es `null` con
+`--dry-run` o `--runner fake`. Los informes anteriores a las acciones por hallazgo (donde la
+«acción» era el texto del hallazgo) se siguen comparando: una acción se reconoce por su texto
+o por el hallazgo que la motiva.
+
+Cada hallazgo de un agente debe terminar con `· Acción: <qué hacer>` (frase breve en
+infinitivo, máx 160 caracteres, que no repita el hallazgo). Sin ella la línea es formato
+inválido: fallo cerrado y un reintento, igual que un hallazgo sin esfuerzo. Lo que la plantilla
+pide pero no es fiable exigir (que empiece por un verbo en infinitivo, máx 15 palabras) no
+invalida la línea: queda como «nota de formato» en el log de la pasada.
 Si un agente devolvió un formato que el parser no acepta, el log de la pasada dice qué faltó o
 qué línea estaba mal (por ejemplo, un `## Score: ?/10` o un `[H2]` ilegible) y la dimensión se
 reintentó una vez con el prompt reforzado antes de quedar «sin evaluar».
@@ -278,6 +309,19 @@ symlinks**, excluye ficheros y carpetas con nombre de secreto (`.env`, `*.pem`,
 `"token": "…"`) y credenciales en URLs. Es protección *best-effort*, no una garantía: no
 audites con agentes de la API un repo con secretos incrustados de forma exótica sin
 revisarlo antes. Los tests usan datos ficticios.
+
+Reparto de la instantánea (120.000 caracteres por agente, tope de 12.000 por fichero): los
+ficheros se clasifican en núcleo (README/STATUS/ARCHITECTURE y manifiesto), código (rotando
+entre rutas API, lib, esquema/migraciones, interfaz y resto), configuración/CI, documentación
+y tests, y cada categoría tiene una cuota según el perfil del agente — técnica, seguridad,
+producto/UX y datos reciben sobre todo código; el resto, sobre todo documentación; un agente
+que mezcla ambos tipos, un reparto equilibrado. La cuota que una categoría no gasta pasa a
+las siguientes. La cabecera de la instantánea dice cuántos ficheros entraron de cada categoría
+y cuántos se omitieron por presupuesto (no leídos: el agente debe pedirlos, no puntuarlos).
+El reparto solo decide QUÉ ficheros ya permitidos entran: no toca la exclusión ni la redacción.
+El presupuesto es total: la estructura de rutas (hasta un cuarto) y el `git log` también lo
+gastan, y si no caben se recortan avisando. `--repo` debe ser un directorio real (ni
+inexistente ni symlink): si no, `run` falla con código 2 antes de lanzar ningún agente.
 Bitácora de construcción y careos: [`docs/LOOPS.md`](docs/LOOPS.md).
 
 ## Instalación

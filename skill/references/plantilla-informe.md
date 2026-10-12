@@ -29,10 +29,13 @@ Guardar como: `~/claude_workspace/AI_OS/PROJECTS/_escalado/<producto>/YYYY-MM-DD
 | **Impacto ALTO** | ⚡ QUICK WINS: ... | 🎯 APUESTAS: ... |
 | **Impacto MEDIO/BAJO** | 📋 Si sobra tiempo: ... | 🗑️ Descartar: ... |
 
+(una línea corta por ítem: la acción o el hallazgo abreviado + su dimensión; el detalle va en el roadmap)
+
 ## Roadmap de escalado
 
 ### H1 — Esta semana (quick wins)
 - [ ] <acción> · ~<horas/€> · sube <dimensión> · ejecutable por: Claude|operador|externo
+  - Hallazgo: <hallazgo que la motiva> (<dimensión> · Evidencia: <archivo/dato>)
 
 ### H2 — Este mes
 - [ ] ...
@@ -57,4 +60,6 @@ Guardar como: `~/claude_workspace/AI_OS/PROJECTS/_escalado/<producto>/YYYY-MM-DD
 **Reglas del informe:**
 - Todo hallazgo cita su evidencia (archivo, URL, dato). Sin evidencia → fuera.
 - Cifras económicas sin fuente → N/D, jamás estimaciones disfrazadas de datos.
+- Coste (`~<horas/€>`) y ejecutor de una acción solo se escriben si se conocen: si nadie los aportó se omiten de la línea y se indica una vez cuántas acciones carecen de ellos.
+- Horizonte por impacto × esfuerzo (alto×bajo → H1 · alto×medio → H2 · alto×alto → H3 · medio×bajo → H2); fuera de las dimensiones prioritarias del objetivo, todo salvo los quick wins baja un horizonte.
 - El informe es diagnóstico: no se ejecuta nada hasta que el operador autoriza el TOP-5.

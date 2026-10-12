@@ -127,20 +127,37 @@ def _objective_of(data: Mapping[str, Any], ignored: list[str]) -> Objective | No
         return None
 
 
-def _actions_of(data: Mapping[str, Any], ignored: list[str]) -> list[str]:
-    """Textos de las acciones del roadmap, sin duplicados y en su orden."""
+@dataclass(frozen=True)
+class _Action:
+    """Acción de un roadmap guardado y las claves (normalizadas) por las que se la reconoce.
+
+    Desde que los agentes dan una acción por hallazgo, el roadmap guarda la acción y, aparte,
+    el hallazgo que la motiva. En los informes antiguos la «acción» ERA el texto del hallazgo.
+    Para casar pasadas de ambos formatos una acción se reconoce por su texto O por su hallazgo.
+    """
+
+    text: str
+    keys: frozenset[str]
+
+
+def _actions_of(data: Mapping[str, Any], ignored: list[str]) -> list[_Action]:
+    """Acciones del roadmap, sin duplicados y en su orden."""
     raw = data.get("roadmap")
     if raw is not None and not isinstance(raw, list):
         ignored.append("roadmap")
         raw = []
     seen: set[str] = set()
-    actions: list[str] = []
+    actions: list[_Action] = []
     for item in raw or []:
         if not isinstance(item, dict) or not isinstance(item.get("action"), str) or not item["action"]:
             continue
-        if _norm(item["action"]) not in seen:
-            seen.add(_norm(item["action"]))
-            actions.append(item["action"])
+        key = _norm(item["action"])
+        if key in seen:
+            continue
+        seen.add(key)
+        finding = item.get("finding")
+        keys = {key, _norm(finding)} if isinstance(finding, str) and finding else {key}
+        actions.append(_Action(item["action"], frozenset(keys)))
     return actions
 
 
@@ -155,6 +172,18 @@ def _finding_texts(data: Mapping[str, Any], dim: Dimension | None = None) -> set
         if isinstance(f, dict) and isinstance(f.get("text"), str)
         and (dim is None or f.get("dimension") == dim.value)
     }
+
+
+def _present(data: Mapping[str, Any], actions: Sequence[_Action]) -> set[str]:
+    """Todo lo que un informe «tiene abierto»: sus acciones, sus hallazgos y las acciones de estos."""
+    present = _finding_texts(data)
+    for action in actions:
+        present |= action.keys
+    raw = data.get("findings")
+    for f in raw if isinstance(raw, list) else []:
+        if isinstance(f, dict) and isinstance(f.get("action"), str) and f["action"]:
+            present.add(_norm(f["action"]))
+    return present
 
 
 def _both_scored(
@@ -276,14 +305,15 @@ def compare_with_previous(report: Report, previous: dict[str, Any]) -> None:
 
     actions = _actions_of(previous, ignored)
     if actions:
-        open_texts = {_norm(f.text) for r in pr.results.values() for f in r.findings}
-        gone = [a for a in actions if _norm(a) not in open_texts]
+        findings = [f for r in pr.results.values() for f in r.findings]
+        open_texts = {_norm(f.text) for f in findings} | {_norm(f.action) for f in findings if f.action}
+        gone = [a for a in actions if not a.keys & open_texts]
         evolution.append(
             f"- Acciones del roadmap anterior que ya no aparecen como hallazgo: {len(gone)}/{len(actions)} "
             "(candidatas a hechas; confirmar con el operador)."
         )
-        evolution.extend(f"  - ✅? {a}" for a in gone)
-        evolution.extend(f"  - ⏳ sigue abierta: {a}" for a in actions if a not in gone)
+        evolution.extend(f"  - ✅? {a.text}" for a in gone)
+        evolution.extend(f"  - ⏳ sigue abierta: {a.text}" for a in actions if a not in gone)
     if ignored:
         evolution.append(f"- {_ignored_line(ignored, 'anterior')}")
     report.evolution = evolution
@@ -371,8 +401,8 @@ def diff_reports(previous: Mapping[str, Any], current: Mapping[str, Any]) -> Rep
 
     prev_actions = _actions_of(previous, ignored_prev)
     cur_actions = _actions_of(current, ignored_cur)
-    prev_present = {_norm(a) for a in prev_actions} | _finding_texts(previous)
-    cur_present = {_norm(a) for a in cur_actions} | _finding_texts(current)
+    prev_present = _present(previous, prev_actions)
+    cur_present = _present(current, cur_actions)
 
     if ignored_prev:
         warnings.append(_ignored_line(ignored_prev, "anterior"))
@@ -386,9 +416,9 @@ def diff_reports(previous: Mapping[str, Any], current: Mapping[str, Any]) -> Rep
         current_global=cur_global,
         global_delta=global_delta,
         rows=rows,
-        closed=[a for a in prev_actions if _norm(a) not in cur_present],
-        new=[a for a in cur_actions if _norm(a) not in prev_present],
-        open=[a for a in prev_actions if _norm(a) in cur_present],
+        closed=[a.text for a in prev_actions if not a.keys & cur_present],
+        new=[a.text for a in cur_actions if not a.keys & prev_present],
+        open=[a.text for a in prev_actions if a.keys & cur_present],
         warnings=warnings,
     )
 

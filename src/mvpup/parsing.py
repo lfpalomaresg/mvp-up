@@ -2,8 +2,17 @@
 
 Regla de la skill: el output DEBE contener los headers `##` exactos de su
 plantilla (completa o ligera). Si falta alguno, o el contenido viola la
-plantilla (score fuera de rango, más de 7 hallazgos), es formato inválido y el
-orquestador reintenta una vez. Regla del informe: hallazgo sin evidencia → fuera.
+plantilla (score fuera de rango, más de 7 hallazgos, hallazgo sin su acción), es
+formato inválido y el orquestador reintenta una vez. Regla del informe: hallazgo
+sin evidencia → fuera.
+
+Cada hallazgo de la plantilla completa termina con `· Acción: <qué hacer>`: una frase
+breve en infinitivo. El roadmap y el TOP-5 muestran la ACCIÓN; el hallazgo queda como
+contexto. Sin acción, con una acción que solo repite el hallazgo o con un párrafo por
+acción, la línea es inválida (fallo cerrado, como un hallazgo sin esfuerzo).
+Lo que la plantilla pide y no es fiable exigir (verbo en infinitivo, máx 15 palabras)
+NO invalida la línea —un reintento cuesta una llamada entera—: queda como nota en el
+log de la pasada (`DimensionResult.notes`).
 
 "Exacto" tolera solo una cosa: omitir la aclaración entre paréntesis de la
 plantilla (`## Hallazgos` vale por `## Hallazgos (máx 7, ordenados por impacto)`).
@@ -67,9 +76,20 @@ _FINDING_RE = re.compile(
     # Nivel: la sigla de la plantilla (A/M/B) o la palabra completa (Alto/Medio/Bajo).
     r"^[-*]\s*\[(?P<id>H\d+)\]\s*(?P<text>.+?)\s*[·|]\s*Impacto:\s*(?P<imp>Alto|Medio|Bajo|[AMB])\b"
     r"(?:\s*[·|]\s*Esfuerzo:\s*(?P<eff>Alto|Medio|Bajo|[AMB])\b)?"
-    r"(?:\s*[·|]\s*Evidencia:\s*(?P<ev>.*))?$",
+    # Cola: `· Evidencia: …` y `· Acción: …` (la troce `_split_tail`, sin regex anidada).
+    r"(?P<tail>.*)$",
     re.IGNORECASE,
 )
+# Inicio de un campo de la cola. La evidencia puede llevar `·` dentro: solo corta un campo conocido.
+_TAIL_FIELD_RE = re.compile(r"\s*[·|]\s*(?P<field>Evidencia|Acci[oó]n):\s*", re.IGNORECASE)
+# Tope de la acción: una frase breve (la plantilla pide ~15 palabras); un párrafo es formato inválido.
+ACTION_MAX_CHARS = 160
+# Lo que la plantilla PIDE pero no se exige (un reintento cuesta una llamada entera): se avisa.
+ACTION_MAX_WORDS = 15
+# Primera palabra en infinitivo, con o sin pronombre enclítico (publicar, reducirse, añadirlo, ir).
+_INFINITIVE_RE = re.compile(r"^[a-záéíóúüñ]*(?:ar|er|ir|ír)(?:se|me|nos|l[oae]s?)?$", re.IGNORECASE)
+# Acción que es la propia plantilla sin rellenar: `<qué hacer…>`.
+_PLACEHOLDER_RE = re.compile(r"^<[^<>]*>$")
 # Evidencia que en realidad declara su ausencia ("N/D (no comprobado)", "sin evidencia...").
 _NO_EVIDENCE_RE = re.compile(
     r"^(?:n\s*/?\s*d\b|n/a\b|sin evidencia|ninguna\b|no (?:verificad|comprobad|disponible)|[-—–]+$|$)",
@@ -90,6 +110,22 @@ class Finding:
     impact: Level
     effort: Level | None
     evidence: str
+    action: str = ""  # qué hacer; vacío en la plantilla ligera y en informes antiguos
+
+    @property
+    def label(self) -> str:
+        """Lo que se muestra como acción: la acción, o el hallazgo si no la hay."""
+        return self.action or self.text
+
+
+def shorten(text: str, limit: int) -> str:
+    """Texto en una línea de como mucho `limit` caracteres (corta en palabra y añade «…»)."""
+    flat = " ".join(text.split())
+    if len(flat) <= limit:
+        return flat
+    cut = flat[: limit - 1]
+    head = cut.rsplit(" ", 1)[0] if " " in cut[limit // 2 :] else cut
+    return head.rstrip(" ,;:.") + "…"
 
 
 @dataclass
@@ -99,7 +135,8 @@ class DimensionResult:
     quick_wins: list[str] = field(default_factory=list)
     risks: list[str] = field(default_factory=list)
     missing_data: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)  # hallazgos descartados por falta de evidencia
+    notes: list[str] = field(default_factory=list)  # desviaciones toleradas de la plantilla (al log)
 
 
 @dataclass
@@ -172,28 +209,100 @@ def _parse_score(header_line: str, header: str) -> float:
     return score
 
 
-def _parse_findings(lines: list[str], warnings: list[str], require_effort: bool) -> list[Finding]:
+def _split_tail(tail: str) -> tuple[str, str] | None:
+    """(evidencia, acción) de la cola de un hallazgo; None si la cola no empieza por un campo.
+
+    Orden de la plantilla: `· Evidencia: … · Acción: …` (la acción es lo ÚLTIMO, así la
+    evidencia puede llevar `·`). Se tolera el orden inverso.
+    """
+    if not tail.strip():
+        return "", ""
+    marks = list(_TAIL_FIELD_RE.finditer(tail))
+    if not marks or marks[0].start() != 0:
+        return None
+
+    def is_action(m: re.Match[str]) -> bool:
+        return m.group("field").lower().startswith("acci")
+
+    first = marks[0]
+    if is_action(first):
+        evidence_mark = next((m for m in marks[1:] if not is_action(m)), None)
+        if evidence_mark is None:
+            return "", tail[first.end():].strip()
+        return tail[evidence_mark.end():].strip(), tail[first.end():evidence_mark.start()].strip()
+    action_marks = [m for m in marks[1:] if is_action(m)]
+    if not action_marks:
+        return tail[first.end():].strip(), ""
+    last = action_marks[-1]
+    return tail[first.end():last.start()].strip(), tail[last.end():].strip()
+
+
+def _action_problem(finding_id: str, text: str, action: str) -> str | None:
+    """Por qué la acción de un hallazgo no vale (None = vale)."""
+    if _NO_EVIDENCE_RE.match(action) or _PLACEHOLDER_RE.match(action):
+        return (
+            f"{finding_id}: falta la acción (termina la línea con «· Acción: <qué hacer>», "
+            "una frase breve en infinitivo)"
+        )
+    if len(action) > ACTION_MAX_CHARS:
+        return (
+            f"{finding_id}: acción demasiado larga ({len(action)} caracteres; máx {ACTION_MAX_CHARS}): "
+            "una frase breve en infinitivo, el detalle va en el hallazgo"
+        )
+    if _fold(action).rstrip(".") == _fold(text).rstrip("."):
+        return f"{finding_id}: la acción repite el hallazgo: di QUÉ hacer, no qué pasa"
+    return None
+
+
+def _action_notes(finding_id: str, action: str) -> list[str]:
+    """Desviaciones de la plantilla que se toleran (la acción se conserva) pero quedan a la vista."""
+    notes = []
+    words = action.split()
+    if words and not _INFINITIVE_RE.match(words[0].strip("«»\"'*_`¡¿")):
+        notes.append(f"{finding_id}: la acción no empieza por un verbo en infinitivo: {action!r}")
+    if len(words) > ACTION_MAX_WORDS:
+        notes.append(f"{finding_id}: acción de {len(words)} palabras (la plantilla pide máx {ACTION_MAX_WORDS})")
+    return notes
+
+
+def _parse_findings(
+    lines: list[str],
+    warnings: list[str],
+    require_effort: bool,
+    require_action: bool = False,
+    notes: list[str] | None = None,
+) -> list[Finding]:
     findings: list[Finding] = []
     unreadable: list[str] = []
     discarded = 0
     for line in lines[1:]:
         fm = _FINDING_RE.match(line)
-        if not fm or (require_effort and not fm.group("eff")):
+        tail = _split_tail(fm.group("tail")) if fm else None
+        if not fm or tail is None or (require_effort and not fm.group("eff")):
             if _FINDING_LIKE_RE.match(line):
                 unreadable.append(f"hallazgo ilegible: {line!r}")
             continue
-        evidence = (fm.group("ev") or "").strip()
+        evidence, action = tail
+        finding_id, text = fm.group("id").upper(), fm.group("text").strip()
         if _NO_EVIDENCE_RE.match(evidence):
-            warnings.append(f"{fm.group('id').upper()} descartado: sin evidencia")
+            warnings.append(f"{finding_id} descartado: sin evidencia")
             discarded += 1
             continue
+        if require_action:
+            problem = _action_problem(finding_id, text, action)
+            if problem:
+                unreadable.append(problem)
+                continue
+            if notes is not None:
+                notes.extend(_action_notes(finding_id, action))
         findings.append(
             Finding(
-                id=fm.group("id").upper(),
-                text=fm.group("text").strip(),
+                id=finding_id,
+                text=text,
                 impact=Level(fm.group("imp")[0].upper()),
                 effort=Level(fm.group("eff")[0].upper()) if fm.group("eff") else None,
                 evidence=evidence,
+                action=action,
             )
         )
     if unreadable:
@@ -248,7 +357,10 @@ def parse_agent_output(text: str) -> DimensionResult:
     if n > MAX_FINDINGS:
         raise FormatError([f"{n} hallazgos: la plantilla permite máx {MAX_FINDINGS}"])
     warnings: list[str] = []
-    findings = _parse_findings(sections["findings"], warnings, require_effort=True)
+    notes: list[str] = []
+    findings = _parse_findings(
+        sections["findings"], warnings, require_effort=True, require_action=True, notes=notes
+    )
     return DimensionResult(
         score=score,
         findings=findings,
@@ -256,6 +368,7 @@ def parse_agent_output(text: str) -> DimensionResult:
         risks=_bullets(sections["risks"]),
         missing_data=_bullets(sections["missing"]),
         warnings=warnings,
+        notes=notes,
     )
 
 

@@ -7,9 +7,9 @@ from pathlib import Path
 VALID_OUTPUT = """\
 ## Score: 6/10 (rúbrica al pie)
 ## Hallazgos (máx 7, ordenados por impacto)
-- [H1] Sin tests automatizados · Impacto: A · Esfuerzo: B · Evidencia: no existe carpeta tests/
-- [H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt sin versiones
-- [H3] Arquitectura monolítica · Impacto: M · Esfuerzo: A · Evidencia: app.py de 2.000 líneas
+- [H1] Sin tests automatizados · Impacto: A · Esfuerzo: B · Evidencia: no existe carpeta tests/ · Acción: Añadir pytest con un test de humo
+- [H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt sin versiones · Acción: Fijar las versiones de las dependencias
+- [H3] Arquitectura monolítica · Impacto: M · Esfuerzo: A · Evidencia: app.py de 2.000 líneas · Acción: Separar la aplicación en módulos
 ## Quick wins (impacto A/M con esfuerzo B)
 - Añadir pytest con un test de humo
 ## Riesgos si no se actúa
