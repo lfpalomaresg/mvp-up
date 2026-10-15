@@ -11,6 +11,7 @@ import re
 # Patrones de claves conocidos (se redactan donde aparezcan).
 _SECRET_VALUE_RE = re.compile(
     r"(?:sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"
+    r"|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}"  # Stripe (secreta y restringida)
     r"|AKIA[0-9A-Z]{16}"
     r"|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}"
     r"|xox[baprs]-[A-Za-z0-9-]{10,}"
@@ -19,8 +20,11 @@ _SECRET_VALUE_RE = re.compile(
 )
 # Asignaciones a claves sensibles en cualquier posición: `api_key = v`, `api_key="v"`
 # dentro de una llamada, `"api_key": "v"` en JSON, `SECRET_TOKEN='v'`… (se conserva el nombre).
-# Credenciales dentro de URLs: esquema://usuario:CLAVE@host
-_URL_CREDENTIALS_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s@/]+@")
+# Credenciales dentro de URLs: esquema://usuario:CLAVE@host. La clave puede llevar `@`: llega
+# hasta el último `@` de la autoridad, que acaba en `/`, `?` o `#` (una `@` en la query no cuenta).
+_URL_CREDENTIALS_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s/?#]+@")
+# Cabeceras `Authorization: Bearer <token>` (se conserva «Bearer»; una palabra corta no es token)
+_BEARER_RE = re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/=-]{16,}")
 _SECRET_ASSIGN_RE = re.compile(
     r"(?i)((?:api[_-]?key|secret|token|passw(?:or)?d|pwd|private[_-]?key|access[_-]?key)"
     r"[\w.-]*[\"']?\s*[:=]\s*)"
@@ -38,4 +42,5 @@ def redact(text: str) -> str:
         return f"{m.group(1)}{quote}{REDACTED}{quote}"
 
     text = _URL_CREDENTIALS_RE.sub(lambda m: f"{m.group(1)}{REDACTED}@", text)
+    text = _BEARER_RE.sub(lambda m: f"{m.group(1)}{REDACTED}", text)
     return _SECRET_ASSIGN_RE.sub(_sub, text)

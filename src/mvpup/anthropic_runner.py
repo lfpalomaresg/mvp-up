@@ -50,7 +50,8 @@ FILE_MAX_CHARS = 12_000
 # Nunca se envían a la API (patrones sobre el nombre del fichero).
 SECRET_PATTERNS = (
     ".env", ".env.*", "*.env", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*",
-    "*secret*", "*credential*", "*token*", ".npmrc", ".pypirc", ".netrc", "*.sqlite", "*.db",
+    "*secret*", "*credential*", "*token*", ".npmrc", ".pypirc", ".netrc", "*.sqlite", "*.sqlite3", "*.db",
+    "*.tfstate", "*.tfstate.*",  # el estado de Terraform guarda las credenciales en claro
 )
 # Excepciones explícitas: plantillas sin valores.
 SAFE_EXCEPTIONS = (".env.example", ".env.sample", ".env.template")

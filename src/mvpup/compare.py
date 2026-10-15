@@ -68,8 +68,9 @@ def _norm(text: str) -> str:
     return " ".join("".join(c for c in plain if not unicodedata.combining(c)).split())
 
 
-def _is_number(value: Any) -> TypeGuard[float]:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+def _is_score(value: Any) -> TypeGuard[float]:
+    """Número de 0 a 10. NaN, ±Infinity (que `json.loads` acepta) o fuera de rango: ilegible."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 10
 
 
 # --- lectura tolerante del JSON de un informe -------------------------------------------------
@@ -77,7 +78,7 @@ def _is_number(value: Any) -> TypeGuard[float]:
 
 
 def _scores_of(data: Mapping[str, Any], ignored: list[str]) -> dict[Dimension, float | None]:
-    """Scores legibles; lo que no sea número (o null) se ignora y se anota."""
+    """Scores legibles; lo que no sea un score 0-10 (o null) se ignora y se anota."""
     raw = data.get("scores")
     if not isinstance(raw, dict):
         ignored.append("scores")
@@ -88,7 +89,7 @@ def _scores_of(data: Mapping[str, Any], ignored: list[str]) -> dict[Dimension, f
             dim = Dimension(key)
         except ValueError:
             continue
-        if value is None or _is_number(value):
+        if value is None or _is_score(value):
             scores[dim] = None if value is None else float(value)
         else:
             ignored.append(f"scores.{key}")
@@ -109,7 +110,7 @@ def _date_of(data: Mapping[str, Any], ignored: list[str]) -> date | None:
 
 def _global_of(data: Mapping[str, Any], ignored: list[str]) -> float | None:
     value = data.get("global_score")
-    if _is_number(value):
+    if _is_score(value):
         return float(value)
     if value is not None:
         ignored.append("global_score")
