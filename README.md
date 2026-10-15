@@ -358,6 +358,10 @@ propios checklists — esas skills solo enriquecen el resultado.
 - 🧪 Loop 11 (2026-10-11): `run --dry-run` de extremo a extremo, parser con fallo cerrado y mensajes explícitos, puerta de tipos con mypy — notas en [`docs/10_SESSION_NOTES.md`](docs/10_SESSION_NOTES.md)
 - 🔁 Loop 12 (2026-10-11, ronda 2): `mvpup compare` entre pasadas, informe HTML autocontenido, `--ficha` con frontmatter y 6 loops de automejora (mypy estricto incluido) — notas en [`docs/10_SESSION_NOTES.md`](docs/10_SESSION_NOTES.md)
 
+## Licencia
+
+MVP-UP se distribuye bajo la [licencia MIT](LICENSE).
+
 ## Autor y créditos
 
 **Luisfran Palomares** — dirección hotelera + IA aplicada.
