@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "graphify hook-guard search"
+            "command": "graphify-guard-ruta search 2>/dev/null || graphify hook-guard search"
           }
         ]
       },
