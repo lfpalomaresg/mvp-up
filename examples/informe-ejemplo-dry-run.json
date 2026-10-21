@@ -1,0 +1,308 @@
+{
+  "schema": 1,
+  "product": "Ejemplo SaaS de reservas",
+  "slug": "ejemplo-saas-de-reservas",
+  "date": "2026-10-21",
+  "mode": "express",
+  "stage": "mvp",
+  "objective": "ingresos",
+  "pass_number": 1,
+  "dry_run": true,
+  "global_score": 4.7,
+  "scores": {
+    "tecnica": 6.0,
+    "producto_ux": 7.0,
+    "comercial": 4.5,
+    "marketing": 3.0
+  },
+  "not_applicable": [],
+  "unevaluated": [],
+  "roadmap": [
+    {
+      "horizon": "H1",
+      "dimension": "comercial",
+      "dimensions": [
+        "comercial"
+      ],
+      "action": "Formular una garantía en la página de precios",
+      "finding": "Oferta sin garantía formulada",
+      "finding_id": "H1",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H1",
+      "dimension": "marketing",
+      "dimensions": [
+        "marketing"
+      ],
+      "action": "Publicar un testimonio en la portada",
+      "finding": "Sin prueba social visible",
+      "finding_id": "H1",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H1",
+      "dimension": "tecnica",
+      "dimensions": [
+        "tecnica"
+      ],
+      "action": "Añadir pytest con un test de humo",
+      "finding": "Sin tests automatizados",
+      "finding_id": "H1",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H1",
+      "dimension": "producto_ux",
+      "dimensions": [
+        "producto_ux"
+      ],
+      "action": "Explicar el primer paso en la pantalla inicial",
+      "finding": "Onboarding sin estado vacío explicado",
+      "finding_id": "H1",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H2",
+      "dimension": "comercial",
+      "dimensions": [
+        "comercial"
+      ],
+      "action": "Justificar el precio frente a la competencia",
+      "finding": "Pricing sin justificar frente a la competencia",
+      "finding_id": "H2",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H2",
+      "dimension": "marketing",
+      "dimensions": [
+        "producto_ux",
+        "marketing"
+      ],
+      "action": "Reescribir el titular de la portada",
+      "finding": "Propuesta de valor poco clara en la portada",
+      "finding_id": "H2",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H2",
+      "dimension": "comercial",
+      "dimensions": [
+        "tecnica",
+        "producto_ux",
+        "comercial",
+        "marketing"
+      ],
+      "action": "Definir las tres métricas de uso que guían las decisiones",
+      "finding": "Sin métricas de uso para decidir",
+      "finding_id": "H3",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H3",
+      "dimension": "comercial",
+      "dimensions": [
+        "comercial"
+      ],
+      "action": "Documentar el embudo de venta de extremo a extremo",
+      "finding": "Rediseñar el proceso de venta de principio a fin",
+      "finding_id": "H5",
+      "cost": null,
+      "owner": null
+    },
+    {
+      "horizon": "H3",
+      "dimension": "tecnica",
+      "dimensions": [
+        "tecnica"
+      ],
+      "action": "Fijar versiones en requirements.txt",
+      "finding": "Dependencias sin fijar versión",
+      "finding_id": "H2",
+      "cost": null,
+      "owner": null
+    }
+  ],
+  "findings": [
+    {
+      "dimension": "tecnica",
+      "id": "H1",
+      "text": "Sin tests automatizados",
+      "action": "Añadir pytest con un test de humo",
+      "impact": "A",
+      "effort": "B",
+      "evidence": "[sintético] no existe carpeta tests/"
+    },
+    {
+      "dimension": "tecnica",
+      "id": "H2",
+      "text": "Dependencias sin fijar versión",
+      "action": "Fijar versiones en requirements.txt",
+      "impact": "A",
+      "effort": "M",
+      "evidence": "[sintético] requirements.txt sin versiones"
+    },
+    {
+      "dimension": "tecnica",
+      "id": "H3",
+      "text": "Sin métricas de uso para decidir",
+      "action": "Definir las tres métricas de uso que guían las decisiones",
+      "impact": "M",
+      "effort": "B",
+      "evidence": "[sintético] ninguna decisión del último mes se tomó con datos"
+    },
+    {
+      "dimension": "tecnica",
+      "id": "H4",
+      "text": "Nombres de variables poco descriptivos",
+      "action": "Renombrar las variables de utils.py",
+      "impact": "B",
+      "effort": "A",
+      "evidence": "[sintético] utils.py usa x, y, tmp"
+    },
+    {
+      "dimension": "tecnica",
+      "id": "H5",
+      "text": "Monolito sin separación de capas",
+      "action": "Separar rutas, lógica y acceso a datos",
+      "impact": "A",
+      "effort": "A",
+      "evidence": "[sintético] app.py concentra rutas, lógica y SQL"
+    },
+    {
+      "dimension": "producto_ux",
+      "id": "H1",
+      "text": "Onboarding sin estado vacío explicado",
+      "action": "Explicar el primer paso en la pantalla inicial",
+      "impact": "A",
+      "effort": "B",
+      "evidence": "[sintético] la pantalla inicial aparece en blanco"
+    },
+    {
+      "dimension": "producto_ux",
+      "id": "H2",
+      "text": "Propuesta de valor poco clara en la portada",
+      "action": "Reescribir el titular de la portada",
+      "impact": "A",
+      "effort": "M",
+      "evidence": "[sintético] el titular no dice qué resuelve"
+    },
+    {
+      "dimension": "producto_ux",
+      "id": "H3",
+      "text": "Sin métricas de uso para decidir",
+      "action": "Definir las tres métricas de uso que guían las decisiones",
+      "impact": "M",
+      "effort": "B",
+      "evidence": "[sintético] ninguna decisión del último mes se tomó con datos"
+    },
+    {
+      "dimension": "producto_ux",
+      "id": "H4",
+      "text": "Iconografía inconsistente entre pantallas",
+      "action": "Unificar el set de iconos",
+      "impact": "B",
+      "effort": "A",
+      "evidence": "[sintético] dos sets de iconos distintos"
+    },
+    {
+      "dimension": "comercial",
+      "id": "H1",
+      "text": "Oferta sin garantía formulada",
+      "action": "Formular una garantía en la página de precios",
+      "impact": "A",
+      "effort": "B",
+      "evidence": "[sintético] la página de precios no menciona garantía"
+    },
+    {
+      "dimension": "comercial",
+      "id": "H2",
+      "text": "Pricing sin justificar frente a la competencia",
+      "action": "Justificar el precio frente a la competencia",
+      "impact": "A",
+      "effort": "M",
+      "evidence": "[sintético] un único plan sin comparativa"
+    },
+    {
+      "dimension": "comercial",
+      "id": "H3",
+      "text": "Sin métricas de uso para decidir",
+      "action": "Definir las tres métricas de uso que guían las decisiones",
+      "impact": "M",
+      "effort": "B",
+      "evidence": "[sintético] ninguna decisión del último mes se tomó con datos"
+    },
+    {
+      "dimension": "comercial",
+      "id": "H4",
+      "text": "Material de venta en formatos dispares",
+      "action": "Unificar el material de venta en un formato",
+      "impact": "B",
+      "effort": "A",
+      "evidence": "[sintético] carpeta ventas/ con pdf, ppt y docx"
+    },
+    {
+      "dimension": "comercial",
+      "id": "H5",
+      "text": "Rediseñar el proceso de venta de principio a fin",
+      "action": "Documentar el embudo de venta de extremo a extremo",
+      "impact": "A",
+      "effort": "A",
+      "evidence": "[sintético] no hay embudo documentado"
+    },
+    {
+      "dimension": "marketing",
+      "id": "H1",
+      "text": "Sin prueba social visible",
+      "action": "Publicar un testimonio en la portada",
+      "impact": "A",
+      "effort": "B",
+      "evidence": "[sintético] ningún testimonio ni caso en la web"
+    },
+    {
+      "dimension": "marketing",
+      "id": "H2",
+      "text": "Propuesta de valor poco clara en la portada",
+      "action": "Reescribir el titular de la portada",
+      "impact": "A",
+      "effort": "M",
+      "evidence": "[sintético] el titular es genérico"
+    },
+    {
+      "dimension": "marketing",
+      "id": "H3",
+      "text": "Sin métricas de uso para decidir",
+      "action": "Definir las tres métricas de uso que guían las decisiones",
+      "impact": "M",
+      "effort": "B",
+      "evidence": "[sintético] ninguna decisión del último mes se tomó con datos"
+    },
+    {
+      "dimension": "marketing",
+      "id": "H4",
+      "text": "Colores de marca no definidos",
+      "action": "Definir la paleta de marca",
+      "impact": "B",
+      "effort": "A",
+      "evidence": "[sintético] cada pieza usa un azul distinto"
+    }
+  ],
+  "top": [
+    "[estructural] Reescribir el titular de la portada (hallazgo: Propuesta de valor poco clara en la portada) · Producto / UX + Marketing y hype · H2",
+    "[estructural] Definir las tres métricas de uso que guían las decisiones (hallazgo: Sin métricas de uso para decidir) · Técnica + Producto / UX + Comercial + Marketing y hype · H2",
+    "Formular una garantía en la página de precios (hallazgo: Oferta sin garantía formulada) · Comercial · H1",
+    "Publicar un testimonio en la portada (hallazgo: Sin prueba social visible) · Marketing y hype · H1",
+    "Añadir pytest con un test de humo (hallazgo: Sin tests automatizados) · Técnica · H1"
+  ],
+  "usage": null,
+  "operator_context": null,
+  "log": []
+}

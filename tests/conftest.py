@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from support import VALID_OUTPUT, write_report
 
 

@@ -9,6 +9,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from support import LIGERA_OUTPUT
 
 from mvpup.cli import main
 from mvpup.compare import diff_reports
@@ -28,10 +29,9 @@ from mvpup.parsing import (
 )
 from mvpup.prompts import build_task_prompt
 from mvpup.report import build_report, render_markdown, save_report, to_json
-from mvpup.roadmap import Horizon, build_roadmap, top_five
+from mvpup.roadmap import build_roadmap, top_five
 from mvpup.runners import FakeRunner
 from mvpup.selection import AgentTask
-from support import LIGERA_OUTPUT
 
 TODAY = date(2026, 10, 12)
 DIM_MD = Path(__file__).parents[1] / "skill" / "references" / "dimensiones.md"

@@ -3,12 +3,12 @@
 from datetime import date
 
 import pytest
+from support import VALID_OUTPUT
 
 from mvpup.dimensions import Dimension as D
 from mvpup.dimensions import Mode, Objective, Stage
 from mvpup.intake import Intake
 from mvpup.parsing import GROUP_SEPARATOR, FormatError, parse_agent_output, parse_grouped_output
-from support import VALID_OUTPUT
 
 
 # (4) impacto/esfuerzo en palabra completa y hallazgos ilegibles

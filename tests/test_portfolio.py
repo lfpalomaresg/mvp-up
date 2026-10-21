@@ -1,11 +1,9 @@
 import json
 
 import pytest
-
 from support import write_report as write
+
 from mvpup.portfolio import load_latest_reports, render_portfolio, synthesize
-
-
 
 
 def test_loads_only_latest_report_per_product(cartera):

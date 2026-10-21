@@ -2,11 +2,10 @@
 
 import json
 
-import pytest
+from support import VALID_OUTPUT
 
 from mvpup.cli import main
 from mvpup.parsing import GROUP_SEPARATOR
-from support import VALID_OUTPUT
 
 BASE = ["run", "--product", "Demo", "--stage", "mvp", "--objective", "ingresos"]
 

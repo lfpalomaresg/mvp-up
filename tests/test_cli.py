@@ -2,10 +2,10 @@ import json
 import re
 
 import pytest
+from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 from mvpup.cli import main
 from mvpup.parsing import GROUP_SEPARATOR
-from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 BASE = ["--product", "Producto Demo", "--stage", "mvp", "--objective", "ingresos"]
 
@@ -198,8 +198,9 @@ def _never(*a, **kw):
 
 
 def test_dry_run_end_to_end_writes_a_complete_report(tmp_path, capsys, monkeypatch):
-    from mvpup import cli
     from support import template_headers
+
+    from mvpup import cli
 
     _block_network(monkeypatch)
     monkeypatch.setattr(cli, "_runner", _never)
@@ -300,3 +301,24 @@ def test_keyboard_interrupt_during_the_pass_exits_130_without_traceback(tmp_path
     assert main(["run", *BASE, "--dry-run", "--out", str(tmp_path / "inf")]) == 130
     err = capsys.readouterr().err
     assert "Interrumpido" in err and "Traceback" not in err
+
+
+def test_version_no_necesita_subcomando(capsys):
+    from mvpup import __version__
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert __version__ in capsys.readouterr().out
+
+
+def test_la_version_del_paquete_y_la_del_codigo_no_desincronizan():
+    import importlib.metadata
+
+    from mvpup import __version__
+
+    try:
+        empaquetada = importlib.metadata.version("mvpup")
+    except importlib.metadata.PackageNotFoundError:
+        pytest.skip("mvpup no está instalado como paquete en este intérprete")
+    assert empaquetada == __version__

@@ -20,9 +20,9 @@ from .consolidation import Entry, Quadrant, Structural, build_matrix, structural
 from .dimensions import Dimension, Mode
 from .intake import Intake
 from .orchestrator import PassResult
-from .runners import AgentUsage
 from .parsing import LIGERA_TEMPLATE, shorten
 from .roadmap import HORIZON_RULE_NOTE, Horizon, Roadmap, RoadmapItem, build_roadmap, top_five
+from .runners import AgentUsage
 from .scoring import fmt_score, global_score, status_icon
 
 SCHEMA_VERSION = 1

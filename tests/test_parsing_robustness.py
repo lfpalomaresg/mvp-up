@@ -5,6 +5,7 @@ dimensión nunca llega al informe con menos de lo que el agente dijo.
 """
 
 import pytest
+from support import VALID_OUTPUT
 
 from mvpup.dimensions import Dimension as D
 from mvpup.dimensions import Objective, Stage
@@ -12,7 +13,6 @@ from mvpup.intake import Intake
 from mvpup.orchestrator import run_pass
 from mvpup.parsing import GROUP_SEPARATOR, FormatError, parse_agent_output, parse_grouped_output
 from mvpup.runners import FakeRunner
-from support import VALID_OUTPUT
 
 H2_LINE = "- [H2] Dependencias sin fijar · Impacto: M · Esfuerzo: B · Evidencia: requirements.txt sin versiones"
 

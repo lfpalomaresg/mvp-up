@@ -4,6 +4,7 @@ import json
 from datetime import date
 
 import pytest
+from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 from mvpup.cli import OPERATOR_CONTEXT_MAX_CHARS, main
 from mvpup.dimensions import Mode, Objective, Stage
@@ -13,7 +14,6 @@ from mvpup.prompts import OPERATOR_CONTEXT_LABEL, build_task_prompt
 from mvpup.report import build_report, render_markdown, to_json
 from mvpup.runners import FakeRunner
 from mvpup.selection import build_plan
-from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 FAKE_KEY = "sk-" + "ant-" + "k" * 40  # ficticia, construida por concatenación
 FAKE_VALUE = "valor" + "inventado" + "246810"

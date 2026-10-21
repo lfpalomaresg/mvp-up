@@ -4,12 +4,11 @@ import json
 from datetime import date
 from pathlib import Path
 
-import pytest
+from support import VALID_OUTPUT
 
 from mvpup.cli import main
 from mvpup.ficha import FRONTMATTER_KEYS, anchor_frontmatter, read_frontmatter
 from mvpup.parsing import GROUP_SEPARATOR
-from support import VALID_OUTPUT
 
 WHEN = date(2026, 10, 11)
 REPORT = Path("informes/demo/2026-10-11-informe.md")

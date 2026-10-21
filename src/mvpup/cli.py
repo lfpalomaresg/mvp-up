@@ -204,7 +204,12 @@ def _runner(args: argparse.Namespace, intake: Intake, plan: Plan) -> AgentRunner
             return FakeRunner(data)
         except TypeError as exc:
             raise CliError(f"--fake-responses: {exc}") from exc
-    from .anthropic_runner import AnthropicRunner, SnapshotProfile, repo_snapshot, snapshots_for_tasks
+    from .anthropic_runner import (
+        AnthropicRunner,
+        SnapshotProfile,
+        repo_snapshot,
+        snapshots_for_tasks,
+    )
     from .config import API_KEY_ENV, load_dotenv
     from .orchestrator import LIGERA_TASK_KEY
 
@@ -427,7 +432,10 @@ def cmd_html(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from . import __version__
+
     parser = argparse.ArgumentParser(prog="mvpup", description="Orquestador MVP-UP")
+    parser.add_argument("--version", action="version", version=f"mvpup {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_plan = sub.add_parser("plan", help="muestra la planificación sin lanzar nada")

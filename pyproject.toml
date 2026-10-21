@@ -15,7 +15,7 @@ mvpup = "mvpup.cli:main"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=1.11"]  # output_config.effort verificado en 1.11
-dev = ["pytest>=8", "mypy>=1.10"]
+dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,3 +38,14 @@ disallow_incomplete_defs = true
 # Extra opcional: el núcleo no lo necesita y en CI no se instala.
 module = "anthropic"
 ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# Red mínima y estable: errores reales (E/F/W), orden de imports (I) y
+# trampas conocidas (B). No es un linter de estilo: no reescribe código.
+select = ["E", "F", "W", "I", "B"]
+# E501 es estilo, no un fallo: el repo ya usa líneas largas en prompts y tests.
+ignore = ["E501"]

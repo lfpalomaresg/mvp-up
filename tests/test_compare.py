@@ -3,6 +3,7 @@ from dataclasses import replace
 from datetime import date
 
 import pytest
+from support import VALID_OUTPUT
 
 from mvpup.compare import compare_with_previous, format_delta
 from mvpup.dimensions import Dimension as D
@@ -12,7 +13,6 @@ from mvpup.orchestrator import run_pass
 from mvpup.parsing import GROUP_SEPARATOR
 from mvpup.report import build_report, render_markdown, save_report
 from mvpup.runners import FakeRunner
-from support import VALID_OUTPUT
 
 
 def pass_with(tecnica="6/10", objective=Objective.INGRESOS, stage=Stage.MVP, tecnica_text=None):

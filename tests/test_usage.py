@@ -5,6 +5,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 from mvpup.anthropic_runner import AgentRefusedError, AnthropicRunner, TruncatedOutputError
 from mvpup.cli import main
@@ -14,7 +15,6 @@ from mvpup.intake import Intake
 from mvpup.orchestrator import run_pass
 from mvpup.report import build_report, render_markdown, to_json
 from mvpup.runners import AgentUsage, FakeRunner
-from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 TODAY = date(2026, 10, 12)
 

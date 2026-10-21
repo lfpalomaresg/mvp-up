@@ -4,15 +4,15 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 from mvpup.dimensions import Mode, Objective, Stage
 from mvpup.intake import Intake
 from mvpup.orchestrator import run_pass
+from mvpup.parsing import GROUP_SEPARATOR
 from mvpup.report import build_report, render_markdown, report_dir, save_report, slugify
 from mvpup.report import to_json as report_to_json
 from mvpup.runners import FakeRunner
-from mvpup.parsing import GROUP_SEPARATOR
-from support import LIGERA_OUTPUT, VALID_OUTPUT
 
 TEMPLATE = Path(__file__).parents[1] / "skill" / "references" / "plantilla-informe.md"
 TODAY = date(2026, 10, 4)

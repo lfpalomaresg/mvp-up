@@ -18,6 +18,7 @@ from typing import Any
 from .dimensions import Dimension
 from .report import REPORT_NAME_RE, SCHEMA_VERSION, report_sort_key
 from .scoring import fmt_score
+
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 WEAK_THRESHOLD = 4  # ≤4 = deficiente según la rúbrica común
